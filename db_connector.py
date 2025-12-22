@@ -1,13 +1,9 @@
-
-
 import os
 import psycopg2
 import pandas as pd
 from dotenv import load_dotenv
 
-
 load_dotenv()
-
 
 def get_db_connection():
     """Establishes connection to the Docker PostgreSQL DB"""
@@ -17,7 +13,7 @@ def get_db_connection():
             database=os.getenv("DB_NAME"),
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASS"),
-            port=os.getenv("DB_PORT", "5432") # Added port for safety
+            port=os.getenv("DB_PORT", "5432")
         )
         return conn
     except Exception as e:
@@ -26,25 +22,25 @@ def get_db_connection():
 
 def run_query(query, params=None):
     """
-    Smart Helper: 
+    Executes SQL queries.
     - Returns DataFrame for SELECT queries.
-    - Commits changes for INSERT/UPDATE queries.
+    - Commits changes for INSERT/UPDATE/DELETE queries.
     """
     conn = get_db_connection()
     if conn:
         try:
-            # Check if this is a WRITE operation (INSERT, UPDATE, DELETE)
+            # Check if this is a WRITE operation
             query_clean = query.strip().upper()
             if query_clean.startswith(("INSERT", "UPDATE", "DELETE", "CREATE", "DROP")):
                 cur = conn.cursor()
                 cur.execute(query, params)
-                conn.commit()  # <--- CRITICAL: Saves your data!
+                conn.commit()  # Commit transaction
                 cur.close()
                 conn.close()
-                return pd.DataFrame() # Return empty DF to keep code consistent
+                return pd.DataFrame()
             
             else:
-                # It is a READ operation (SELECT)
+                # READ operation
                 df = pd.read_sql(query, conn, params=params)
                 conn.close()
                 return df
@@ -55,7 +51,6 @@ def run_query(query, params=None):
             return pd.DataFrame()
             
     return pd.DataFrame()
-# Add this to the end of db_connector.py
 
 def init_db():
     """Reads schema.sql and creates tables if they don't exist"""

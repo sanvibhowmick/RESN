@@ -1,10 +1,9 @@
 import logging
 import warnings
-# Make sure db_connector actually has init_db!
 from db_connector import run_query, init_db 
 from utils import DropoutInterventionSystem
 
-# Suppress "FutureWarning" from Google AI to keep output clean
+# Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
 
 # Configure logging
@@ -15,15 +14,13 @@ def setup_test_data():
     print("⚙️  Resetting Test Data in Database...")
     
     # --- 1. SETUP RAJU (ID 1) -> HIGH RISK ---
-    # CRITICAL FIX: Delete CHILDREN first (Risk, Scores, Attendance)
+    # Delete child records first
     run_query("DELETE FROM social_risk WHERE student_id = 1")
     run_query("DELETE FROM exam_scores WHERE student_id = 1")
     run_query("DELETE FROM attendance WHERE student_id = 1")
-    
-    # THEN delete PARENT (Student)
     run_query("DELETE FROM students WHERE student_id = 1")
     
-    # Now we can insert fresh data
+    # Insert fresh data
     run_query("INSERT INTO students (student_id, name, gender, caste_category, annual_income, grade) VALUES (1, 'Raju', 'Male', 'OBC', 45000, 9)")
     run_query("INSERT INTO attendance (student_id, month, attendance_percent) VALUES (1, CURRENT_DATE, 60)")
     run_query("INSERT INTO social_risk (student_id, seasonal_labor, parent_education_level, sibling_dropout) VALUES (1, TRUE, 'None', TRUE)")
@@ -31,20 +28,16 @@ def setup_test_data():
     run_query("INSERT INTO exam_scores (student_id, subject, score, exam_date) VALUES (1, 'Math', 40, CURRENT_DATE - INTERVAL '1 month')")
 
     # --- 2. SETUP AMIT (ID 3) -> ACADEMIC WATCH ---
-    # Delete Children first
     run_query("DELETE FROM social_risk WHERE student_id = 3")
     run_query("DELETE FROM exam_scores WHERE student_id = 3")
     run_query("DELETE FROM attendance WHERE student_id = 3")
-    
-    # Delete Parent
     run_query("DELETE FROM students WHERE student_id = 3")
     
-    # Insert fresh data
     run_query("INSERT INTO students (student_id, name, gender, caste_category, annual_income, grade) VALUES (3, 'Amit', 'Male', 'General', 600000, 10)")
     run_query("INSERT INTO attendance (student_id, month, attendance_percent) VALUES (3, CURRENT_DATE, 95)")
-    # (No social risk for Amit, so we skip inserting it)
     run_query("INSERT INTO exam_scores (student_id, subject, score, exam_date) VALUES (3, 'Math', 60, CURRENT_DATE - INTERVAL '4 months')")
     run_query("INSERT INTO exam_scores (student_id, subject, score, exam_date) VALUES (3, 'Math', 45, CURRENT_DATE)")
+
 def run_tests():
     system = DropoutInterventionSystem()
     
@@ -60,7 +53,6 @@ def run_tests():
         print(f"\n👉 Generated Action: {action['type'].upper()}")
         
         if action['type'] == 'script':
-            # FIX: Removed [:150] and added a separator line
             print("-" * 20)
             print(action['content']) 
             print("-" * 20)
@@ -80,13 +72,11 @@ def run_tests():
         print(f"\n👉 Generated Action: {action['type'].upper()}")
         
         if action['type'] == 'teacher_plan':
-            # FIX: Removed [:200] and formatted it nicely
             print("-" * 20)
             print(action['content'])
             print("-" * 20)
+
 if __name__ == "__main__":
-    # CRITICAL STEP: Create tables first!
     init_db() 
-    
     setup_test_data()
     run_tests()

@@ -1,4 +1,4 @@
-import os  # <--- FIX 1: Cleaned up this line
+import os
 import logging
 import google.generativeai as genai
 from pathlib import Path
@@ -23,7 +23,7 @@ class DropoutInterventionSystem:
         
         try:
             genai.configure(api_key=self.api_key)
-            # FIX 2: Switched to 'gemini-2.5-flash' which is the standard current model
+            # Using Gemini 2.5 Flash for optimized performance
             self.model = genai.GenerativeModel('gemini-2.5-flash')
         except Exception as e:
             logging.error(f"Error configuring AI: {e}")
@@ -191,7 +191,7 @@ class DropoutInterventionSystem:
         
         strategy = "Use simple words, focus on how education helps in the long run." if literacy == "Low" else "Focus on career stability and dignity."
         
-        # 🔧 FIX: Added Logic to include Scholarship in the AI prompt
+        # Include Scholarship Logic
         scholarship_instruction = ""
         if scheme_name:
             scholarship_instruction = f"CRITICAL: You must explicitly mention that we have prepared the application for the '{scheme_name}' scholarship. Explain to them that this government scheme will provide money to support the family, so they don't have to worry about costs."
@@ -215,6 +215,7 @@ class DropoutInterventionSystem:
         except Exception as e:
             logging.error(f"AI Script Error: {e}")
             return "Error generating script."
+
     def generate_remedial_plan(self, student_name, subject, current_score, previous_score, decline_duration):
         if not getattr(self, 'model', None): return "AI Client not configured."
 
@@ -225,8 +226,8 @@ class DropoutInterventionSystem:
             trend_msg = "Chronic Decline (Foundational Gaps)"
 
         prompt = f"""
-        Act as a teacher's guide.You see a fall in the student's grade.Depending on the fall and the subject suggest teachers measures to take like remedial classes what kind of teaching methods will be working better with this student.
-        Do not mention you are a teacher's guide or even reference the teacher in second person.Only talk about Amit
+        Act as a teacher's guide. You see a fall in the student's grade. Depending on the fall and the subject, suggest measures for the teacher.
+        Do not mention you are a teacher's guide or even reference the teacher in second person. Only talk about {student_name}.
         Student: {student_name}. Subject: {subject}.
         Status: Score {current_score} (Prev: {previous_score}). Trend: {trend_msg}.
         
@@ -243,7 +244,7 @@ class DropoutInterventionSystem:
             logging.error(f"AI Plan Error: {e}")
             return f"Error generating plan: {e}"
 
-  # --- 🧠 ORCHESTRATOR ---
+    # --- 🧠 ORCHESTRATOR ---
     def process_intervention(self, student_id, target_language="Hindi"):
         name = self.get_student_name(student_id)
         if name == "Unknown":
@@ -277,15 +278,13 @@ class DropoutInterventionSystem:
         if is_high_risk:
             result['status'] = "HIGH RISK 🚨"
             
-            # 🔧 FIX: Check for scholarship BEFORE generating script
             scheme = self.match_scholarship(metrics, demographics)
             
-            # 🔧 FIX: Pass the scheme name to the AI generator
             script = self.generate_ai_script(
                 student_name=name, 
                 risk_list=risk_reasons, 
                 literacy=metrics['literacy'], 
-                scheme_name=scheme,  # <--- Passing the matched scheme here
+                scheme_name=scheme,
                 language=target_language
             )
             result['actions'].append({"type": "script", "content": script})
