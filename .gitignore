@@ -1,0 +1,14 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Environment variables / secrets
+.env
+
+# Docker volumes (database data)
+pg_data/
+
+# OS files
+.DS_Store
+Thumbs.db
