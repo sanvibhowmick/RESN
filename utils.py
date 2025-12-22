@@ -1,9 +1,8 @@
-import os
-import json
+import os  # <--- FIX 1: Cleaned up this line
 import logging
+import google.generativeai as genai
 from pathlib import Path
 from fpdf import FPDF
-from openai import OpenAI
 from db_connector import run_query
 
 # Configure Logging
@@ -11,26 +10,30 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 class DropoutInterventionSystem:
     def __init__(self):
+        # Load API Key
         self.api_key = os.getenv("GEMINI_API_KEY")
-        self.client = self._get_ai_client()
         self.output_dir = Path("generated_forms")
         self.output_dir.mkdir(exist_ok=True)
+        self._configure_ai()
 
-    def _get_ai_client(self):
+    def _configure_ai(self):
         if not self.api_key:
             logging.warning("No API Key found. AI features will be disabled.")
-            return None
-        # FIX: Ensure the URL ends exactly like this
-        return OpenAI(api_key=self.api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+            return
+        
+        try:
+            genai.configure(api_key=self.api_key)
+            # FIX 2: Switched to 'gemini-2.5-flash' which is the standard current model
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
+        except Exception as e:
+            logging.error(f"Error configuring AI: {e}")
 
     # --- MODULE A: DATA FETCHING ---
     def get_demographics(self, student_id):
-        # 🔧 FIX: Corrected table name to 'students' and column to 'grade'
         sql = "SELECT grade, annual_income, caste_category, gender FROM students WHERE student_id = %s"
         df = run_query(sql, params=(student_id,))
         if df.empty:
             return {}
-        # Normalize keys for the rest of the app
         data = df.iloc[0].to_dict()
         return {
             'grade_level': data['grade'],
@@ -95,7 +98,6 @@ class DropoutInterventionSystem:
     
     def match_scholarship(self, metrics, demographics):
         if not demographics: return None
-        # 🔧 FIX: Matches 'schemes' table columns correctly
         sql = """
         SELECT scheme_name FROM schemes 
         WHERE min_grade <= %s AND max_grade >= %s
@@ -106,42 +108,115 @@ class DropoutInterventionSystem:
         df = run_query(sql, params)
         return df.iloc[0]['scheme_name'] if not df.empty else None
 
-    def generate_pdf(self, student_name, scheme_name):
+    def generate_pdf(self, student_name, scheme_name, demographics, metrics):
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial", 'B', 16)
-        pdf.cell(0, 10, txt="SCHOLARSHIP APPLICATION", ln=1, align='C')
-        pdf.set_font("Arial", size=12)
-        pdf.ln(10)
-        pdf.cell(0, 10, txt=f"Name: {student_name}", ln=1)
-        pdf.cell(0, 10, txt=f"Scheme: {scheme_name}", ln=1)
-        pdf.cell(0, 10, txt="Status: URGENT INTERVENTION REQUIRED", ln=1)
         
-        filename = self.output_dir / f"{student_name.replace(' ', '_')}.pdf"
+        # --- HEADER ---
+        pdf.set_font("Arial", 'B', 20)
+        pdf.cell(0, 15, txt="INTERVENTION & SCHOLARSHIP FORM", ln=1, align='C', border=1)
+        pdf.ln(10)
+
+        # --- SECTION 1: STUDENT PROFILE ---
+        pdf.set_fill_color(200, 220, 255) # Light Blue
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, "1. STUDENT PROFILE", ln=1, fill=True)
+        
+        pdf.set_font("Arial", size=11)
+        # Row 1
+        pdf.cell(95, 10, f"Name: {student_name}", border=1)
+        pdf.cell(95, 10, f"Gender: {demographics.get('gender', 'N/A')}", border=1, ln=1)
+        # Row 2
+        pdf.cell(95, 10, f"Grade: {demographics.get('grade_level', 'N/A')}", border=1)
+        pdf.cell(95, 10, f"Caste Category: {demographics.get('caste', 'N/A')}", border=1, ln=1)
+        # Row 3
+        pdf.cell(190, 10, f"Annual Family Income: INR {demographics.get('family_income', 0)}", border=1, ln=1)
+        
+        pdf.ln(5)
+
+        # --- SECTION 2: ACADEMIC & RISK STATUS ---
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, "2. PERFORMANCE & RISK ASSESSMENT", ln=1, fill=True)
+        
+        pdf.set_font("Arial", size=11)
+        # Metrics
+        att_status = "CRITICAL" if metrics['attendance'] < 75 else "Stable"
+        pdf.cell(95, 10, f"Attendance: {metrics['attendance']}% ({att_status})", border=1)
+        pdf.cell(95, 10, f"Literacy Background: {metrics['literacy']}", border=1, ln=1)
+        
+        # Risk Factors List
+        pdf.cell(0, 10, "Identified Risk Factors:", border="L R", ln=1)
+        pdf.set_font("Arial", 'I', 11)
+        if metrics['social_risks']:
+            for risk in metrics['social_risks']:
+                pdf.cell(0, 8, f"   - {risk}", border="L R", ln=1)
+        else:
+            pdf.cell(0, 8, "   - No specific social risks identified.", border="L R", ln=1)
+        pdf.cell(0, 2, "", border="T", ln=1) # Closing line
+
+        pdf.ln(5)
+
+        # --- SECTION 3: RECOMMENDATION ---
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, "3. RECOMMENDED INTERVENTION", ln=1, fill=True)
+        
+        pdf.set_font("Arial", size=12)
+        pdf.multi_cell(0, 10, f"Based on the analysis of the student's socioeconomic background and academic trajectory, we strongly recommend enrollment in the following government scheme to prevent dropout:\n\n>> {scheme_name.upper()}")
+        pdf.ln(5)
+
+        # --- SECTION 4: DECLARATION & SIGNATURES ---
+        pdf.ln(20)
+        pdf.set_font("Arial", size=10)
+        pdf.multi_cell(0, 5, "I hereby certify that the information provided above is true to the best of my knowledge. The student requires immediate financial or counseling intervention to continue their education.")
+        
+        pdf.ln(30)
+        
+        # Signatures
+        pdf.set_font("Arial", 'B', 11)
+        pdf.cell(63, 10, "_______________________", align='C')
+        pdf.cell(63, 10, "_______________________", align='C')
+        pdf.cell(63, 10, "_______________________", align='C', ln=1)
+        
+        pdf.cell(63, 5, "School Principal", align='C')
+        pdf.cell(63, 5, "Nodal Officer", align='C')
+        pdf.cell(63, 5, "Parent/Guardian", align='C', ln=1)
+
+        # Output
+        filename = self.output_dir / f"{student_name.replace(' ', '_')}_Profile.pdf"
         pdf.output(str(filename))
         return str(filename)
 
-    def generate_ai_script(self, student_name, risk_list, literacy, language="Hindi"):
-        if not self.client: return "AI Client not configured."
+    def generate_ai_script(self, student_name, risk_list, literacy, scheme_name=None, language="Hindi"):
+        if not getattr(self, 'model', None): return "AI Client not configured."
         
-        strategy = "Use farming analogies." if literacy == "Low" else "Focus on career stability."
+        strategy = "Use simple words, focus on how education helps in the long run." if literacy == "Low" else "Focus on career stability and dignity."
+        
+        # 🔧 FIX: Added Logic to include Scholarship in the AI prompt
+        scholarship_instruction = ""
+        if scheme_name:
+            scholarship_instruction = f"CRITICAL: You must explicitly mention that we have prepared the application for the '{scheme_name}' scholarship. Explain to them that this government scheme will provide money to support the family, so they don't have to worry about costs."
+
         prompt = f"""
-        Act as a social worker. Goal: Persuade parents to keep {student_name} in school.
-        Risks: {', '.join(risk_list)}. Literacy: {literacy} (Strategy: {strategy}).
-        Write a 3-4 sentence script in {language}.
+        Act as a compassionate social worker in rural India. 
+        Goal: Persuade parents to keep {student_name} in school.
+        
+        Context:
+        - The family is considering making the child drop out.
+        - Risks identified: {', '.join(risk_list)}.
+        - Parent Literacy: {literacy} (Strategy: {strategy}).
+        
+        {scholarship_instruction}
+        
+        Task: Write a convincing, emotional, yet respectful 3-4 sentence script in {language} to say to the parents.
         """
         try:
-            response = self.client.chat.completions.create(
-                model="gemini-1.5-flash", 
-                messages=[{"role": "user", "content": prompt}]
-            )
-            return response.choices[0].message.content
+            response = self.model.generate_content(prompt)
+            return response.text
         except Exception as e:
             logging.error(f"AI Script Error: {e}")
             return "Error generating script."
-
     def generate_remedial_plan(self, student_name, subject, current_score, previous_score, decline_duration):
-        if not self.client: return "AI Client not configured."
+        if not getattr(self, 'model', None): return "AI Client not configured."
 
         trend_msg = "Steady Struggle"
         if previous_score - current_score > 15:
@@ -150,29 +225,30 @@ class DropoutInterventionSystem:
             trend_msg = "Chronic Decline (Foundational Gaps)"
 
         prompt = f"""
-        Act as a Senior Headmaster mentoring a teacher.
+        Act as a teacher's guide.You see a fall in the student's grade.Depending on the fall and the subject suggest teachers measures to take like remedial classes what kind of teaching methods will be working better with this student.
+        Do not mention you are a teacher's guide or even reference the teacher in second person.Only talk about Amit
         Student: {student_name}. Subject: {subject}.
         Status: Score {current_score} (Prev: {previous_score}). Trend: {trend_msg}.
         
         Task: Provide a structured 3-point Remedial Plan.
-        1. INVESTIGATION: Specific question the teacher should ask.
+        1. Questions: Specific questions the teacher should ask.
         2. ANALOGY: Explain a difficult concept in {subject} using a rural/farming metaphor.
         3. ACTIVITY: A zero-cost peer learning activity.
         """
         
         try:
-            response = self.client.chat.completions.create(
-                model="gemini-1.5-flash", 
-                messages=[{"role": "user", "content": prompt}]
-            )
-            return response.choices[0].message.content
+            response = self.model.generate_content(prompt)
+            return response.text
         except Exception as e:
             logging.error(f"AI Plan Error: {e}")
             return f"Error generating plan: {e}"
 
-    # --- 🧠 ORCHESTRATOR ---
+  # --- 🧠 ORCHESTRATOR ---
     def process_intervention(self, student_id, target_language="Hindi"):
         name = self.get_student_name(student_id)
+        if name == "Unknown":
+            return {"status": "ERROR", "message": "Student ID not found in DB"}
+
         metrics = self.get_student_metrics(student_id)
         demographics = self.get_demographics(student_id)
         
@@ -200,12 +276,22 @@ class DropoutInterventionSystem:
 
         if is_high_risk:
             result['status'] = "HIGH RISK 🚨"
-            script = self.generate_ai_script(name, risk_reasons, metrics['literacy'], language=target_language)
+            
+            # 🔧 FIX: Check for scholarship BEFORE generating script
+            scheme = self.match_scholarship(metrics, demographics)
+            
+            # 🔧 FIX: Pass the scheme name to the AI generator
+            script = self.generate_ai_script(
+                student_name=name, 
+                risk_list=risk_reasons, 
+                literacy=metrics['literacy'], 
+                scheme_name=scheme,  # <--- Passing the matched scheme here
+                language=target_language
+            )
             result['actions'].append({"type": "script", "content": script})
 
-            scheme = self.match_scholarship(metrics, demographics)
             if scheme:
-                pdf_path = self.generate_pdf(name, scheme)
+                pdf_path = self.generate_pdf(name, scheme, demographics, metrics)
                 result['actions'].append({"type": "file", "path": pdf_path, "description": "Scholarship Form"})
 
         elif acad['current_score'] < 50:

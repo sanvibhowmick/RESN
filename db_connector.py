@@ -1,9 +1,13 @@
+
+
 import os
 import psycopg2
 import pandas as pd
 from dotenv import load_dotenv
 
+
 load_dotenv()
+
 
 def get_db_connection():
     """Establishes connection to the Docker PostgreSQL DB"""
@@ -51,3 +55,26 @@ def run_query(query, params=None):
             return pd.DataFrame()
             
     return pd.DataFrame()
+# Add this to the end of db_connector.py
+
+def init_db():
+    """Reads schema.sql and creates tables if they don't exist"""
+    conn = get_db_connection()
+    if not conn:
+        print("❌ Could not connect to DB to initialize tables.")
+        return
+
+    try:
+        with open('schema.sql', 'r') as f:
+            schema_sql = f.read()
+        
+        cur = conn.cursor()
+        cur.execute(schema_sql)
+        conn.commit()
+        print("✅ Database tables initialized successfully!")
+        cur.close()
+        conn.close()
+    except FileNotFoundError:
+        print("❌ Error: schema.sql file not found.")
+    except Exception as e:
+        print(f"❌ Error initializing DB: {e}")
