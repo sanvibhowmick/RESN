@@ -51,7 +51,7 @@ class DropoutInterventionSystem:
         
         try:
             genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
         except Exception as e:
             logging.error(f"Error configuring AI: {e}")
             self.model = None
@@ -287,7 +287,10 @@ class DropoutInterventionSystem:
     # =========================================================================
 
     def process_intervention(self, student_id, target_language="Hindi"):
-        """Main entry point to analyze a student and generate intervention assets."""
+        """
+        Advanced Rule-Based Analysis for Student Risk Calculation.
+        Considers: Social, Financial, Academic, Attendance, and Demographic factors.
+        """
         name = self.get_student_name(student_id)
         if name == "Unknown":
             return {"status": "ERROR", "message": "Student ID not found in DB"}
@@ -295,70 +298,130 @@ class DropoutInterventionSystem:
         metrics = self.get_student_metrics(student_id)
         demographics = self.get_demographics(student_id)
         
-        acad = metrics['academic']
-        risks_list = metrics['social_risks'] 
-        att = metrics['attendance']
+        # Unpack Data
+        acad = metrics.get('academic', {})
+        risks_list = metrics.get('social_risks', [])
+        att = metrics.get('attendance', 100)
+        literacy = metrics.get('literacy', 'None') # Parent Education
+        income = demographics.get('income', 0)
 
-        # 1. Calculate Score
+        # --- 1. DEFINE WEIGHTS ---
+        # Refined weights based on dropout research
+        RISK_WEIGHTS = {
+            'sibling_dropout': 30,  # High correlation with dropout
+            'seasonal_labor': 25,   # Indicates economic pressure
+            'migrant_family': 20,   # Stability issue
+            'childcare_responsibility': 15
+        }
+
         current_risk_score = 0
         risk_reasons = []
 
-        social_score = sum(self.SOCIAL_RISK_WEIGHTS.get(r, 10) for r in risks_list)
-        current_risk_score += social_score
-        if risks_list: risk_reasons.append(f"Social Factors: {', '.join(risks_list)}")
+        # --- 2. CALCULATE SCORE ---
 
-        if att < 75:
-            current_risk_score += 50
+        # A. SOCIAL FACTORS (Existing Risks)
+        for risk in risks_list:
+            weight = RISK_WEIGHTS.get(risk, 10)
+            current_risk_score += weight
+        if risks_list:
+            risk_reasons.append(f"Social Factors ({len(risks_list)} identified)")
+
+        # B. ECONOMIC FACTOR (New)
+        if income < 50000:
+            current_risk_score += 25
+            risk_reasons.append("Severe Economic Distress (<50k)")
+        elif income < 100000:
+            current_risk_score += 10
+
+        # C. PARENTAL SUPPORT FACTOR (New)
+        if literacy == 'None':
+            current_risk_score += 15
+            risk_reasons.append("Lack of Parental Academic Support")
+
+        # D. ATTENDANCE (Nuanced)
+        if att < 50:
+            current_risk_score += 60 # Critical
+            risk_reasons.append(f"Critical Attendance ({att}%)")
+        elif att < 75:
+            current_risk_score += 30 # Warning
             risk_reasons.append(f"Low Attendance ({att}%)")
-        
-        if (acad['previous_score'] - acad['current_score']) > 20:
-            current_risk_score += 40
-            risk_reasons.append("Severe Academic Drop")
 
-        # 2. Determine Status
-        is_high_risk = current_risk_score >= self.HIGH_RISK_THRESHOLD
+        # E. ACADEMIC PERFORMANCE (Nuanced)
+        current_score = acad.get('current_score', 0)
+        prev_score = acad.get('previous_score', 0)
         
+        if current_score < 35:
+            current_risk_score += 40 # Failing
+            risk_reasons.append(f"Failing Grades ({current_score})")
+        elif (prev_score - current_score) > 15:
+            current_risk_score += 25 # Sharp Drop
+            risk_reasons.append("Sharp Academic Decline")
+
+        # Cap score at 100
+        current_risk_score = min(current_risk_score, 100)
+
+        # --- 3. DETERMINE STATUS ---
+        # Thresholds: Safe (0-30), Watch (31-59), High Risk (60+)
+        if current_risk_score >= 60:
+            status = "HIGH RISK 🚨"
+            is_high_risk = True
+        elif current_risk_score >= 30:
+            status = "ACADEMIC WATCH ⚠️"
+            is_high_risk = False
+        else:
+            status = "NORMAL ✅"
+            is_high_risk = False
+
         result = {
             "student_id": student_id,
             "student_name": name,
             "risk_score": current_risk_score,
-            "status": "HIGH RISK 🚨" if is_high_risk else "NORMAL",
+            "status": status,
             "actions": []
         }
 
-        # 3. Logic Branching
-        
-        # BRANCH A: HIGH RISK INTERVENTION
+        # --- 4. GENERATE INTERVENTIONS ---
+
+        # SCENARIO 1: High Risk (Socio-Economic Focus)
         if is_high_risk:
+            # Match Govt Scheme
             scheme = self.match_scholarship(metrics, demographics)
             
-            # Action 1: AI Script (Persuasion)
+            # Action: Talking Points
             script = self.generate_ai_script(
                 student_name=name, 
                 risk_list=risk_reasons, 
-                literacy=metrics['literacy'], 
+                literacy=literacy, 
                 scheme_name=scheme,
                 language=target_language
             )
-            result['actions'].append({"type": "talking_points", "content": script})
+            result['actions'].append({
+                "type": "script", # Changed type name to match app.py logic
+                "content": script
+            })
 
-            # Action 2: PDF Form
+            # Action: PDF Form
             if scheme:
                 pdf_path = self.generate_pdf(name, scheme, demographics, metrics)
-                result['actions'].append({"type": "file", "path": pdf_path, "description": "Scholarship Form"})
+                result['actions'].append({
+                    "type": "file", 
+                    "path": pdf_path, 
+                    "description": f"Application for {scheme}"
+                })
 
-        # BRANCH B: ACADEMIC REMEDIATION
-        if acad['current_score'] < 50:
-            if result['status'] == "NORMAL": 
-                result['status'] = "ACADEMIC WATCH ⚠️"
-            
+        # SCENARIO 2: Academic/Attendance Watch (Pedagogy Focus)
+        # Trigger this if they are explicitly 'Watch' status OR if they are 'High Risk' but specifically due to grades
+        if "WATCH" in status or (current_score < 40): 
             plan = self.generate_remedial_plan(
                 student_name=name,
-                subject=acad['weakest_subject'],
-                current_score=acad['current_score'],
-                previous_score=acad['previous_score'],
-                decline_duration=acad['decline_duration']
+                subject=acad.get('weakest_subject', 'General'),
+                current_score=current_score,
+                previous_score=prev_score,
+                decline_duration="3 months" # Placeholder or calc from DB
             )
-            result['actions'].append({"type": "teacher_plan", "content": plan})
+            result['actions'].append({
+                "type": "teacher_plan", 
+                "content": plan
+            })
             
         return result
