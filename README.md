@@ -33,14 +33,14 @@ docker-compose up -d
 
 4. Install Dependencies
 
-Bash
+
 
 pip install -r requirements.txt
 
 
 5. Run the App
 
-Bash
+
 
 streamlit run app.py
 
