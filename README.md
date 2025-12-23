@@ -29,21 +29,21 @@ GEMINI_API_KEY=your_google_api_key
 Bash
 
 docker-compose up -d
-**
+
 
 4. Install Dependencies
 
 Bash
 
 pip install -r requirements.txt
-**
+
 
 5. Run the App
 
 Bash
 
 streamlit run app.py
-**
+
 
 📂 Tech Stack
 Frontend: Streamlit
