@@ -73,35 +73,36 @@ CREATE TABLE schemes (
 -- ==========================================
 
 -- SCHEMES
-INSERT INTO schemes (scheme_name, min_grade, max_grade, income_limit, caste_category, gender) VALUES
-('Pre-Matric Scholarship (SC)', 9, 10, 250000, 'SC', 'Any'),
-('Begum Hazrat Mahal Scholarship', 9, 12, 200000, 'Any', 'Female'),
-('Pre-Matric Scholarship (ST)', 9, 10, 250000, 'ST', 'Any'),
-('OBC Pre-Matric Scholarship', 9, 10, 200000, 'OBC', 'Any'),
-('National Means-cum-Merit Scholarship (NMMS)', 8, 12, 150000, 'Any', 'Any'),
-('Girl Child Education Incentive Scheme', 6, 12, 300000, 'Any', 'Female');
+INSERT INTO schemes 
+(scheme_name, min_grade, max_grade, income_limit, caste_category, gender)
+VALUES
+-- 1. Pre-Matric Scholarship for SC Students
+('Pre-Matric Scholarship for SC Students', 1, 10, 250000, 'SC', 'Any'),
 
--- STUDENT 1: Raju (High Risk)
-INSERT INTO students (name, gender, caste_category, annual_income, grade)
-VALUES ('Raju', 'Male', 'OBC', 45000, 9);
+-- 2. Pre-Matric Scholarship for ST Students
+('Pre-Matric Scholarship for ST Students', 1, 10, 250000, 'ST', 'Any'),
 
-INSERT INTO exam_scores (student_id, subject, score, exam_date) VALUES
-(1, 'Math', 85, CURRENT_DATE - INTERVAL '4 months'),
-(1, 'Math', 40, CURRENT_DATE - INTERVAL '1 month');
+-- 3. Post-Matric Scholarship for SC Students
+('Post-Matric Scholarship for SC Students', 11, 12, 250000, 'SC', 'Any'),
 
-INSERT INTO social_risk (student_id, sibling_dropout, parent_education_level) 
-VALUES (1, TRUE, 'None');
+-- 4. Post-Matric Scholarship for ST Students
+('Post-Matric Scholarship for ST Students', 11, 12, 250000, 'ST', 'Any'),
 
--- STUDENT 2: Rani (Medium Risk)
-INSERT INTO students (name, gender, caste_category, annual_income, grade)
-VALUES ('Rani', 'Female', 'General', 150000, 9);
+-- 5. Pre-Matric Scholarship for OBC Students
+('Pre-Matric Scholarship for OBC Students', 1, 10, 100000, 'OBC', 'Any'),
 
-INSERT INTO social_risk (student_id, sibling_dropout, parent_education_level) 
-VALUES (2, TRUE, 'Secondary');
+-- 6. National Means-cum-Merit Scholarship (NMMS)
+('National Means-cum-Merit Scholarship', 9, 12, 350000, 'Any', 'Any'),
 
--- STUDENT 3: Amit (Academic Watch)
-INSERT INTO students (name, gender, caste_category, annual_income, grade)
-VALUES ('Amit', 'Male', 'General', 600000, 10);
+-- 7. Begum Hazrat Mahal National Scholarship
+('Begum Hazrat Mahal National Scholarship', 1, 12, 200000, 'Minority', 'Female'),
 
-INSERT INTO attendance (student_id, month, attendance_percent)
-VALUES (3, '2025-01-01', 60.5);
+-- 8. Pragati Scholarship for Girl Students
+('Pragati Scholarship for Girl Students', 11, 12, 800000, 'Any', 'Female'),
+
+-- 9. Sukanya Samriddhi-linked State Scholarship
+('Sukanya Samriddhi State Scholarship', 1, 12, 300000, 'Any', 'Female'),
+
+-- 10. PM CARES for Children Scheme
+('PM CARES for Children', 1, 12, 500000, 'Any', 'Any');
+
