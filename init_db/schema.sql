@@ -1,8 +1,12 @@
 -- schema.sql
 
 -- ==========================================
--- 0. CLEANUP (Reset database for fresh start)
+-- 0. EXTENSIONS & CLEANUP
 -- ==========================================
+CREATE EXTENSION IF NOT EXISTS vector;
+
+DROP TABLE IF EXISTS agent_memory;
+DROP TABLE IF EXISTS interventions;
 DROP TABLE IF EXISTS social_risk;
 DROP TABLE IF EXISTS schemes;
 DROP TABLE IF EXISTS exam_scores;
@@ -10,7 +14,7 @@ DROP TABLE IF EXISTS attendance;
 DROP TABLE IF EXISTS students;
 
 -- ==========================================
--- 1. STUDENTS (Core Identity)
+-- 1. CORE RELATIONAL TABLES (Existing)
 -- ==========================================
 CREATE TABLE students (
   student_id SERIAL PRIMARY KEY,
@@ -21,43 +25,31 @@ CREATE TABLE students (
   grade INT
 );
 
--- ==========================================
--- 2. ATTENDANCE (Monthly Aggregates)
--- ==========================================
 CREATE TABLE attendance (
   record_id SERIAL PRIMARY KEY,
-  student_id INT REFERENCES students(student_id),
-  month DATE,           -- e.g., '2025-09-01'
+  student_id INT REFERENCES students(student_id) ON DELETE CASCADE,
+  month DATE,
   attendance_percent FLOAT
 );
 
--- ==========================================
--- 3. EXAM SCORES (Time-Series Data)
--- ==========================================
 CREATE TABLE exam_scores (
   score_id SERIAL PRIMARY KEY,
-  student_id INT REFERENCES students(student_id),
+  student_id INT REFERENCES students(student_id) ON DELETE CASCADE,
   subject TEXT,
   exam_date DATE,
   score FLOAT
 );
 
--- ==========================================
--- 4. SOCIAL RISK INDICATORS (The Hidden Factors)
--- ==========================================
 CREATE TABLE social_risk (
   risk_id SERIAL PRIMARY KEY,
-  student_id INT REFERENCES students(student_id),
+  student_id INT REFERENCES students(student_id) ON DELETE CASCADE,
   seasonal_labor BOOLEAN DEFAULT FALSE,
   sibling_dropout BOOLEAN DEFAULT FALSE,
   migrant_family BOOLEAN DEFAULT FALSE,
   childcare_responsibility BOOLEAN DEFAULT FALSE,
-  parent_education_level VARCHAR(20) -- Values: 'None', 'Primary', 'Secondary', 'Graduate'
+  parent_education_level VARCHAR(20) -- 'None', 'Primary', 'Secondary', 'Graduate'
 );
 
--- ==========================================
--- 5. GOVERNMENT SCHEMES (The Policy Rules)
--- ==========================================
 CREATE TABLE schemes (
   scheme_id SERIAL PRIMARY KEY,
   scheme_name TEXT,
@@ -69,10 +61,29 @@ CREATE TABLE schemes (
 );
 
 -- ==========================================
--- 6. STRATEGIC SEED DATA
+-- 2. AGENTIC MEMORY & LOGGING (New)
 -- ==========================================
 
--- SCHEMES
+-- Structured log of every action an agent takes
+CREATE TABLE interventions (
+  intervention_id SERIAL PRIMARY KEY,
+  student_id INT REFERENCES students(student_id) ON DELETE CASCADE,
+  agent_type TEXT,      -- 'RiskAnalyst', 'FinancialAdv', 'Educator'
+  action_taken TEXT,    -- 'Generated Script', 'Matched Scholarship', 'Remedial Plan'
+  content TEXT,         -- The actual text/plan generated
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Vector memory for semantic "Searchable" history
+CREATE TABLE agent_memory (
+  memory_id SERIAL PRIMARY KEY,
+  student_id INT REFERENCES students(student_id) ON DELETE CASCADE,
+  context_summary TEXT, -- Human-readable summary
+  embedding vector(1536), -- Embedding size for OpenAI Models
+  metadata JSONB,       -- Extra details (e.g., emotion, specific concerns)
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 INSERT INTO schemes 
 (scheme_name, min_grade, max_grade, income_limit, caste_category, gender)
 VALUES
@@ -94,8 +105,8 @@ VALUES
 -- 6. National Means-cum-Merit Scholarship (NMMS)
 ('National Means-cum-Merit Scholarship', 9, 12, 350000, 'Any', 'Any'),
 
--- 7. Begum Hazrat Mahal National Scholarship
-('Begum Hazrat Mahal National Scholarship', 1, 12, 200000, 'Minority', 'Female'),
+-- 7. REPLACED: Pre-Matric Scholarship for Minority Students
+('Pre-Matric Scholarship for Minority Students', 1, 10, 100000, 'Minority', 'Any'),
 
 -- 8. Pragati Scholarship for Girl Students
 ('Pragati Scholarship for Girl Students', 11, 12, 800000, 'Any', 'Female'),
@@ -105,4 +116,3 @@ VALUES
 
 -- 10. PM CARES for Children Scheme
 ('PM CARES for Children', 1, 12, 500000, 'Any', 'Any');
-

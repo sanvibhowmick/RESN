@@ -1,18 +1,19 @@
 import os
 import psycopg2
 import pandas as pd
+from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables for agents to access
 load_dotenv()
 
 def get_db_connection():
-    """Establishes connection to the PostgreSQL DB"""
+    """Establishes connection to the PostgreSQL DB."""
     try:
         conn = psycopg2.connect(
             host=os.getenv("DB_HOST", "localhost"),
-            database=os.getenv("DB_NAME", "school_db"),
-            user=os.getenv("DB_USER", "postgres"),
+            database=os.getenv("DB_NAME", "resn_school"),
+            user=os.getenv("DB_USER", "admin"),
             password=os.getenv("DB_PASS", "password"),
             port=os.getenv("DB_PORT", "5432")
         )
@@ -21,67 +22,70 @@ def get_db_connection():
         print(f"❌ Database Connection Failed: {e}")
         return None
 
-def run_query(query, params=None, is_write=False):
+def run_query(query, params=None, is_write=False, return_dict=True):
     """
-    Executes SQL queries.
-    - is_write=False (Default): Returns DataFrame (for SELECT).
-    - is_write=True: Executes INSERT/UPDATE and returns the ID (if RETURNING used) or True.
+    Executes SQL queries optimized for AI Agents.
+    - is_write=True: For INSERT/UPDATE. Returns the ID or True.
+    - return_dict=True: Returns a list of dictionaries (LLM-friendly).
+    - return_dict=False: Returns a Pandas DataFrame (Dashboard-friendly).
     """
     conn = get_db_connection()
     if not conn:
-        return None if is_write else pd.DataFrame()
+        return None if is_write else []
 
     try:
         if is_write:
-            # WRITE Operation
+            # WRITE Operation (e.g., saving a new intervention)
             cur = conn.cursor()
             cur.execute(query, params)
-            
-            # --- THE FIX STARTS HERE ---
-            # If the query includes 'RETURNING', fetch that value (e.g., student_id)
+            result = True
             if "RETURNING" in query.upper():
-                result = cur.fetchone()[0] # Returns the ID (int)
-            else:
-                result = True # Returns Success (bool)
-            # --- THE FIX ENDS HERE ---
-
+                result = cur.fetchone()[0]
             conn.commit()
             cur.close()
-            conn.close()
             return result
-            
         else:
-            # READ Operation
-            df = pd.read_sql(query, conn, params=params)
-            conn.close()
-            return df
-            
+            # READ Operation (e.g., fetching student history for an agent)
+            if return_dict:
+                cur = conn.cursor(cursor_factory=RealDictCursor)
+                cur.execute(query, params)
+                result = cur.fetchall()
+                cur.close()
+                return [dict(row) for row in result]
+            else:
+                return pd.read_sql(query, conn, params=params)
     except Exception as e:
         print(f"❌ Query Failed: {e}")
-        if conn: conn.close()
-        return False if is_write else pd.DataFrame()
+        return False if is_write else []
+    finally:
+        if conn:
+            conn.close()
 
 def init_db():
-    """Reads schema.sql and creates tables if they don't exist"""
+    """Initializes tables. Run this when you update schema.sql with pgvector support."""
     conn = get_db_connection()
     if not conn:
-        print("❌ Could not connect to DB to initialize tables.")
         return
 
     try:
-        with open('schema.sql', 'r') as f:
+        # Check for schema.sql in the standard project path
+        schema_path = os.path.join('init_db', 'schema.sql')
+        if not os.path.exists(schema_path):
+             schema_path = 'schema.sql'
+             
+        with open(schema_path, 'r') as f:
             schema_sql = f.read()
         
         cur = conn.cursor()
         cur.execute(schema_sql)
         conn.commit()
-        print("✅ Database tables initialized successfully!")
+        print("✅ Database tables and pgvector initialized!")
         cur.close()
-        conn.close()
-    except FileNotFoundError:
-        print("❌ Error: schema.sql file not found.")
     except Exception as e:
         print(f"❌ Error initializing DB: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 if __name__ == "__main__":
     init_db()

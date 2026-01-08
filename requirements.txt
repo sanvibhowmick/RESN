@@ -1,7 +1,7 @@
 psycopg2-binary
 pandas
 fpdf
-openai
 python-dotenv
 streamlit
 plotly
+openai
