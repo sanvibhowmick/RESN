@@ -100,7 +100,11 @@ if page == "📊 Dashboard":
         st.markdown("#### Subject Performance Overview")
         df_acad = run_query("SELECT subject, AVG(score) as avg_score FROM exam_scores GROUP BY subject", return_dict=False)
         if not df_acad.empty:
-            st.plotly_chart(px.bar(df_acad, x='subject', y='avg_score'), use_container_width=True)
+            st.plotly_chart(px.bar(df_acad, x='subject', y='avg_score', color='subject'),
+    use_container_width=True
+)
+
+            
         else: st.info("No data available")
 
 # =========================================================
