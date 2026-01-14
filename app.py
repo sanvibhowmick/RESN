@@ -18,14 +18,14 @@ st.set_page_config(
 # --- CUSTOM CSS ---
 st.markdown("""
 <style>
-    .main-header { font-size: 2.5rem; font-weight: 700; color: #1E3A8A; margin-bottom: 0.5rem; }
+    .main-header { font-size: 2.5rem; font-weight: 700; color: #FFFFFF; margin-bottom: 0.5rem; }
     .metric-container { background-color: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); border-top: 4px solid #ccc; text-align: center; height: 100%; }
     .metric-value { font-size: 2.2rem; font-weight: 800; color: #1E293B; }
     .metric-label { font-size: 0.9rem; text-transform: uppercase; color: #64748B; font-weight: 600; }
     .card-blue { border-top-color: #3B82F6; }
     .card-red { border-top-color: #EF4444; }
     .card-green { border-top-color: #10B981; }
-    .section-title { font-size: 1.5rem; font-weight: 700; color: #334155; margin-top: 2rem; border-left: 5px solid #1E3A8A; padding-left: 15px; margin-bottom: 1rem; }
+    .section-title { font-size: 1.5rem; font-weight: 700; color: #FFFFFF; margin-top: 2rem; border-left: 5px solid #1E3A8A; padding-left: 15px; margin-bottom: 1rem; }
     .status-badge { padding: 15px; border-radius: 8px; font-weight: bold; text-align: center; margin-top: 10px; }
     .status-high { background-color: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; }
     .status-warn { background-color: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; }
