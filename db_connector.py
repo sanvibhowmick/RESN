@@ -2,55 +2,63 @@ import os
 import psycopg2
 import pandas as pd
 from psycopg2.extras import RealDictCursor
+from psycopg2.pool import ThreadedConnectionPool
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-def get_db_connection():
-    """Establishes connection to the PostgreSQL DB with dynamic SSL support."""
+# --- CONNECTION POOL INITIALIZATION ---
+# This creates a pool of 1 to 10 connections that stay open
+# and are reused across different app sessions.
+try:
     db_host = os.getenv("DB_HOST", "localhost")
-    
-    # Check if we are connecting to localhost (Docker) or a cloud provider (Supabase)
     is_localhost = db_host in ["localhost", "127.0.0.1", "0.0.0.0"]
     ssl_mode = "disable" if is_localhost else "require"
 
-    try:
-        conn = psycopg2.connect(
-            host=db_host,
-            database=os.getenv("DB_NAME", "resn_school"),
-            user=os.getenv("DB_USER", "admin"),
-            password=os.getenv("DB_PASS", "password"),
-            port=os.getenv("DB_PORT", "5432"),
-            sslmode=ssl_mode  # Dynamically set based on the host
-        )
-        return conn
-    except Exception as e:
-        print(f"❌ Database Connection Failed: {e}")
-        return None
+    db_pool = ThreadedConnectionPool(
+        minconn=1,
+        maxconn=10,
+        host=db_host,
+        database=os.getenv("DB_NAME", "resn_school"),
+        user=os.getenv("DB_USER", "admin"),
+        password=os.getenv("DB_PASS", "password"),
+        port=os.getenv("DB_PORT", "5432"),
+        sslmode=ssl_mode
+    )
+    print("✅ Connection pool initialized")
+except Exception as e:
+    print(f"❌ Failed to initialize connection pool: {e}")
+    db_pool = None
 
 def run_query(query, params=None, is_write=False, return_dict=True):
     """
-    Executes SQL queries optimized for AI Agents and Dashboards.
-    - Ensures empty DataFrames are returned on error to prevent app crashes.
+    Executes SQL queries using the connection pool for high performance.
     """
-    conn = get_db_connection()
-    if not conn:
+    if not db_pool:
         if is_write: return False
         return [] if return_dict else pd.DataFrame()
 
+    conn = None
     try:
+        # Request a warm connection from the pool
+        conn = db_pool.getconn()
+        
         if is_write:
+            # For writes, we use a standard cursor to handle RETURNING clauses
             cur = conn.cursor()
             cur.execute(query, params)
             result = True
             if "RETURNING" in query.upper():
-                result = cur.fetchone()[0]
+                row = cur.fetchone()
+                if row:
+                    result = row[0]
             conn.commit()
             cur.close()
             return result
         else:
             if return_dict:
+                # For reads, use RealDictCursor for AI-friendly dictionary output
                 cur = conn.cursor(cursor_factory=RealDictCursor)
                 cur.execute(query, params)
                 result = cur.fetchall()
@@ -59,20 +67,20 @@ def run_query(query, params=None, is_write=False, return_dict=True):
             else:
                 # Returns a DataFrame for Streamlit charts
                 return pd.read_sql(query, conn, params=params)
+
     except Exception as e:
+        if conn:
+            conn.rollback() # Ensure failed transactions are rolled back
         print(f"❌ Query Failed: {str(e)}")
         if is_write: return False
-        # FIX: Returns correct type on error to avoid 'list has no attribute empty'
         return [] if return_dict else pd.DataFrame() 
     finally:
         if conn:
-            conn.close()
+            # CRITICAL: Return the connection to the pool instead of closing it
+            db_pool.putconn(conn)
 
 def init_db():
-    """Initializes tables and scholarship schemes."""
-    conn = get_db_connection()
-    if not conn: return
-
+    """Initializes tables using a single pooled connection."""
     try:
         schema_path = os.path.join('init_db', 'schema.sql')
         if not os.path.exists(schema_path):
@@ -81,15 +89,17 @@ def init_db():
         with open(schema_path, 'r') as f:
             schema_sql = f.read()
         
+        # We can just use our existing run_query for simple execution
+        # but for multiple statements in schema.sql, we do it directly:
+        conn = db_pool.getconn()
         cur = conn.cursor()
         cur.execute(schema_sql)
         conn.commit()
-        print("✅ Database tables and pgvector initialized!")
         cur.close()
+        db_pool.putconn(conn)
+        print("✅ Database tables and pgvector initialized!")
     except Exception as e:
         print(f"❌ Error initializing DB: {e}")
-    finally:
-        if conn: conn.close()
 
 if __name__ == "__main__":
     init_db()
