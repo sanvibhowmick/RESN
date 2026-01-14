@@ -12,7 +12,7 @@ st.set_page_config(
     page_title="RESN | Rural Education Safety Net",
     page_icon="🌾",
     layout="wide",
-    initial_sidebar_state="expanded" # Corrected parameter name here
+    initial_sidebar_state="expanded" 
 )
 
 # --- CUSTOM CSS ---
@@ -152,6 +152,17 @@ elif page == "🚨 Intervention Center":
                                 if action['type'] == 'finance':
                                     st.success(f"Matched: {action['data'].get('scheme', 'N/A')}")
                                     st.write(action['data'].get('justification', ''))
+                                    
+                                    # ADDED: DOWNLOAD BUTTON FOR PDF FORM
+                                    pdf_path = action['data'].get('pdf_path')
+                                    if pdf_path and os.path.exists(pdf_path):
+                                        with open(pdf_path, "rb") as f:
+                                            st.download_button(
+                                                label="📥 Download Filled Application (PDF)",
+                                                data=f,
+                                                file_name=os.path.basename(pdf_path),
+                                                mime="application/pdf"
+                                            )
                                 elif action['type'] == 'counseling':
                                     st.code(action['data'].get('script', ''), language='text')
                                 elif action['type'] == 'academic':
