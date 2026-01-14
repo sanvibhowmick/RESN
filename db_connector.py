@@ -8,14 +8,23 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_db_connection():
-    """Establishes connection to the PostgreSQL DB."""
+    """Establishes connection to the PostgreSQL DB with dynamic SSL support."""
+    # Get the host from environment variables
+    db_host = os.getenv("DB_HOST", "localhost")
+    
+    # Check if we are connecting to localhost (Docker) or a cloud provider (Supabase)
+    # Most cloud providers like Supabase require SSL, while local Docker usually doesn't.
+    is_localhost = db_host in ["localhost", "127.0.0.1", "0.0.0.0"]
+    ssl_mode = "disable" if is_localhost else "require"
+
     try:
         conn = psycopg2.connect(
-            host=os.getenv("DB_HOST", "localhost"),
+            host=db_host,
             database=os.getenv("DB_NAME", "resn_school"),
             user=os.getenv("DB_USER", "admin"),
             password=os.getenv("DB_PASS", "password"),
-            port=os.getenv("DB_PORT", "5432")
+            port=os.getenv("DB_PORT", "5432"),
+            sslmode=ssl_mode  # Dynamically set based on the host
         )
         return conn
     except Exception as e:

@@ -252,9 +252,9 @@ elif page == "📝 Data Entry":
                         if sid:
                             # Insert social factors
                             run_query("""
-                                INSERT INTO social_risk (student_id, parent_education_level, migrant_worker, seasonal_laborer, sibling_dropout)
-                                VALUES (%s, %s, %s, %s, %s)
-                            """, (sid, parent_edu, migrant, laborer, dropout), is_write=True)
+    INSERT INTO social_risk (student_id, parent_education_level, migrant_family, seasonal_labor, sibling_dropout) 
+    VALUES (%s, %s, %s, %s, %s)
+""", (sid, parent_edu, migrant, laborer, dropout), is_write=True)
                             
                             # Insert attendance
                             run_query("INSERT INTO attendance (student_id, attendance_percent) VALUES (%s, %s)", (sid, attendance), is_write=True)
@@ -294,7 +294,7 @@ elif page == "📝 Data Entry":
                             if sid:
                                 # 2. Insert Social Factors (Mapping CSV Booleans)
                                 run_query("""
-                                    INSERT INTO social_risk (student_id, parent_education_level, migrant_worker, seasonal_laborer, sibling_dropout) 
+                                    INSERT INTO social_risk (student_id, parent_education_level, migrant_family, seasonal_labor, sibling_dropout) 
                                     VALUES (%s, %s, %s, %s, %s)
                                 """, (sid, str(row['parent_edu']), bool(row.get('is_migrant', False)), 
                                       bool(row.get('is_laborer', False)), bool(row.get('is_sibling_dropout', False))), is_write=True)
