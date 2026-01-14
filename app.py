@@ -51,7 +51,8 @@ with st.sidebar:
     total = 0 
     try:
         df_total = run_query("SELECT COUNT(*) as count FROM students", return_dict=False)
-        if df_total is not None and not df_total.empty:
+        # Robust check to prevent 'list' has no attribute 'empty' error
+        if isinstance(df_total, pd.DataFrame) and not df_total.empty:
             total = int(df_total.iloc[0]['count'])
         st.metric("Total Students Enrolled", total)
         st.success("🟢 System Online")
@@ -74,7 +75,8 @@ if page == "📊 Dashboard":
     """
     try:
         df_risk_count = run_query(risk_sql, return_dict=False)
-        at_risk_count = int(df_risk_count.iloc[0]['count']) if df_risk_count is not None and not df_risk_count.empty else 0
+        # Robust check for Dataframe
+        at_risk_count = int(df_risk_count.iloc[0]['count']) if isinstance(df_risk_count, pd.DataFrame) and not df_risk_count.empty else 0
     except Exception as e:
         st.warning(f"Could not calculate at-risk students: {str(e)}")
         at_risk_count = 0
@@ -94,7 +96,7 @@ if page == "📊 Dashboard":
         st.markdown("#### Parental Literacy Profile")
         try:
             df_risk = run_query("SELECT parent_education_level as factor, COUNT(*) as count FROM social_risk GROUP BY factor", return_dict=False)
-            if df_risk is not None and not df_risk.empty:
+            if isinstance(df_risk, pd.DataFrame) and not df_risk.empty:
                 fig = px.pie(df_risk, values='count', names='factor', hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
                 st.plotly_chart(fig, use_container_width=True)
             else:
@@ -106,7 +108,7 @@ if page == "📊 Dashboard":
         st.markdown("#### Subject Performance Overview")
         try:
             df_acad = run_query("SELECT subject, AVG(score) as avg_score FROM exam_scores GROUP BY subject", return_dict=False)
-            if df_acad is not None and not df_acad.empty:
+            if isinstance(df_acad, pd.DataFrame) and not df_acad.empty:
                 fig = px.bar(df_acad, x='subject', y='avg_score', color='avg_score', color_continuous_scale='Purples')
                 fig.update_layout(yaxis_title="Average Score", xaxis_title="Subject")
                 st.plotly_chart(fig, use_container_width=True)
@@ -127,7 +129,7 @@ elif page == "🚨 Intervention Center":
         st.error(f"Error loading students: {str(e)}")
         students_df = None
     
-    if students_df is not None and not students_df.empty:
+    if isinstance(students_df, pd.DataFrame) and not students_df.empty:
         c1, c2, c3 = st.columns([2, 1, 1])
         with c1:
             selected_name = st.selectbox("Select Student", students_df['name'].tolist())
@@ -250,11 +252,11 @@ elif page == "📝 Data Entry":
                         """, (name, grade, income, caste, gender), is_write=True)
                         
                         if sid:
-                            # Insert social factors
+                            # Fixed column names: migrant_family and seasonal_labor to match schema.sql
                             run_query("""
-    INSERT INTO social_risk (student_id, parent_education_level, migrant_family, seasonal_labor, sibling_dropout) 
-    VALUES (%s, %s, %s, %s, %s)
-""", (sid, parent_edu, migrant, laborer, dropout), is_write=True)
+                                INSERT INTO social_risk (student_id, parent_education_level, migrant_family, seasonal_labor, sibling_dropout) 
+                                VALUES (%s, %s, %s, %s, %s)
+                            """, (sid, parent_edu, migrant, laborer, dropout), is_write=True)
                             
                             # Insert attendance
                             run_query("INSERT INTO attendance (student_id, attendance_percent) VALUES (%s, %s)", (sid, attendance), is_write=True)
@@ -292,7 +294,7 @@ elif page == "📝 Data Entry":
                             """, (str(row['name']), int(row['grade']), int(row['income']), str(row['caste']), str(row['gender'])), is_write=True)
                             
                             if sid:
-                                # 2. Insert Social Factors (Mapping CSV Booleans)
+                                # 2. Insert Social Factors with fixed column names (migrant_family, seasonal_labor)
                                 run_query("""
                                     INSERT INTO social_risk (student_id, parent_education_level, migrant_family, seasonal_labor, sibling_dropout) 
                                     VALUES (%s, %s, %s, %s, %s)
@@ -308,7 +310,9 @@ elif page == "📝 Data Entry":
                                           (sid, 'General', float(row['score'])), is_write=True)
                                 
                                 success_count += 1
-                        except Exception:
+                        except Exception as row_error:
+                            # Added explicit error reporting per row for debugging
+                            st.error(f"Error at row {idx} ({row.get('name', 'Unknown')}): {row_error}")
                             error_count += 1
                         progress_bar.progress((idx + 1) / len(df))
                     
@@ -317,4 +321,4 @@ elif page == "📝 Data Entry":
                         st.warning(f"⚠️ {error_count} records failed.")
                     st.rerun()
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error processing file: {e}")
