@@ -31,7 +31,9 @@ def run_query(query, params=None, is_write=False, return_dict=True):
     """
     conn = get_db_connection()
     if not conn:
-        return None if is_write else []
+        
+        if is_write: return None
+        return [] if return_dict else pd.DataFrame()
 
     try:
         if is_write:
@@ -56,7 +58,10 @@ def run_query(query, params=None, is_write=False, return_dict=True):
                 return pd.read_sql(query, conn, params=params)
     except Exception as e:
         print(f"❌ Query Failed: {e}")
-        return False if is_write else []
+        if is_write:
+            return False
+        # FIX: Returns correct type on error to avoid 'list has no attribute empty'
+        return [] if return_dict else pd.DataFrame()
     finally:
         if conn:
             conn.close()
