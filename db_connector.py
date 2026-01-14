@@ -4,16 +4,14 @@ import pandas as pd
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
-# Load environment variables for agents to access
+# Load environment variables
 load_dotenv()
 
 def get_db_connection():
     """Establishes connection to the PostgreSQL DB with dynamic SSL support."""
-    # Get the host from environment variables
     db_host = os.getenv("DB_HOST", "localhost")
     
     # Check if we are connecting to localhost (Docker) or a cloud provider (Supabase)
-    # Most cloud providers like Supabase require SSL, while local Docker usually doesn't.
     is_localhost = db_host in ["localhost", "127.0.0.1", "0.0.0.0"]
     ssl_mode = "disable" if is_localhost else "require"
 
@@ -33,20 +31,16 @@ def get_db_connection():
 
 def run_query(query, params=None, is_write=False, return_dict=True):
     """
-    Executes SQL queries optimized for AI Agents.
-    - is_write=True: For INSERT/UPDATE. Returns the ID or True.
-    - return_dict=True: Returns a list of dictionaries (LLM-friendly).
-    - return_dict=False: Returns a Pandas DataFrame (Dashboard-friendly).
+    Executes SQL queries optimized for AI Agents and Dashboards.
+    - Ensures empty DataFrames are returned on error to prevent app crashes.
     """
     conn = get_db_connection()
     if not conn:
-        
-        if is_write: return None
+        if is_write: return False
         return [] if return_dict else pd.DataFrame()
 
     try:
         if is_write:
-            # WRITE Operation (e.g., saving a new intervention)
             cur = conn.cursor()
             cur.execute(query, params)
             result = True
@@ -56,7 +50,6 @@ def run_query(query, params=None, is_write=False, return_dict=True):
             cur.close()
             return result
         else:
-            # READ Operation (e.g., fetching student history for an agent)
             if return_dict:
                 cur = conn.cursor(cursor_factory=RealDictCursor)
                 cur.execute(query, params)
@@ -64,25 +57,23 @@ def run_query(query, params=None, is_write=False, return_dict=True):
                 cur.close()
                 return [dict(row) for row in result]
             else:
+                # Returns a DataFrame for Streamlit charts
                 return pd.read_sql(query, conn, params=params)
     except Exception as e:
-        print(f"❌ Query Failed: {e}")
-        if is_write:
-            return False
+        print(f"❌ Query Failed: {str(e)}")
+        if is_write: return False
         # FIX: Returns correct type on error to avoid 'list has no attribute empty'
-        return [] if return_dict else pd.DataFrame()
+        return [] if return_dict else pd.DataFrame() 
     finally:
         if conn:
             conn.close()
 
 def init_db():
-    """Initializes tables. Run this when you update schema.sql with pgvector support."""
+    """Initializes tables and scholarship schemes."""
     conn = get_db_connection()
-    if not conn:
-        return
+    if not conn: return
 
     try:
-        # Check for schema.sql in the standard project path
         schema_path = os.path.join('init_db', 'schema.sql')
         if not os.path.exists(schema_path):
              schema_path = 'schema.sql'
@@ -98,8 +89,7 @@ def init_db():
     except Exception as e:
         print(f"❌ Error initializing DB: {e}")
     finally:
-        if conn:
-            conn.close()
+        if conn: conn.close()
 
 if __name__ == "__main__":
     init_db()
