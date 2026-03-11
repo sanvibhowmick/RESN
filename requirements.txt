@@ -2,6 +2,10 @@ psycopg2-binary
 pandas
 fpdf
 python-dotenv
-streamlit
+streamlit>=1.35.0
 plotly
 openai
+# ADD THESE:
+torch
+joblib
+scikit-learn

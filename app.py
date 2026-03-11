@@ -170,7 +170,15 @@ elif page == "🚨 Intervention Center":
                                 elif action['type'] == 'counseling':
                                     st.code(action['data'].get('script', ''), language='text')
                                 elif action['type'] == 'academic':
-                                    st.markdown(action['data'].get('remedial_plan', ''))
+                                    # Safely display the plan, or reveal WHY it was skipped/failed
+                                    if 'remedial_plan' in action['data']:
+                                        st.markdown(action['data']['remedial_plan'])
+                                    elif 'message' in action['data']:
+                                        st.warning(f"⚠️ {action['data']['message']}")
+                                    elif 'error' in action['data']:
+                                        st.error(f"❌ {action['data']['error']}")
+                                    else:
+                                        st.write(action['data'])
                 except Exception as e:
                     st.error(f"Analysis Failed: {e}")
     else:

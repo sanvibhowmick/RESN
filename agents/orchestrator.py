@@ -29,25 +29,28 @@ class RESNOrchestrator:
         past_memories = self.memory.search_memory(student_id, "previous risk factors and interventions")
 
         # 2. Level 1: Risk Analysis (The Foundation)
-        # Every student goes through the Analyst first
         risk_report = self.analyst.analyze(student_data, past_memories)
         
         # Save the Analyst's current conclusion to long-term memory
         self.memory.add_memory(
             student_id=student_id, 
-            context_summary=risk_report['summary_for_memory'],
-            metadata={"status": risk_report['status'], "score": risk_report['risk_score']}
+            context_summary=risk_report.get('summary_for_memory', 'No summary provided.'),
+            metadata={"status": risk_report.get('status'), "score": risk_report.get('risk_score')}
         )
 
-        status = risk_report.get('status', 'NORMAL')
+        # ✅ CRITICAL FIX: Sanitize the string so "Watch", "WATCH ", and "watch" are all treated equally
+        raw_status = risk_report.get('status', 'NORMAL')
+        status = str(raw_status).strip().upper() 
+
         results = {
             "analysis": risk_report,
             "actions": []
         }
 
         # 3. Level 2: Conditional Intervention Triage
-        # --- PATH A: HIGH RISK (Counseling + Scholarship + Remedial) ---
-        if status == "HIGH_RISK":
+        
+        # --- PATH A: DANGER (Counseling + Scholarship + Remedial) ---
+        if status == "DANGER":
             # Financial Support
             finance_result = self.finance.provide_support(student_id, student_data, risk_report)
             results['actions'].append({"type": "finance", "data": finance_result})
