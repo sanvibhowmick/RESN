@@ -5,7 +5,11 @@ python-dotenv
 streamlit>=1.35.0
 plotly
 openai
+<<<<<<< HEAD
 # ADD THESE:
 torch
 joblib
 scikit-learn
+=======
+altair<5.0.0  # Optional: only if you want to keep the old chart style
+>>>>>>> 2a3593073938b9f8e9a9dff9046db2867ccb9a0d
