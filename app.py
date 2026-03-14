@@ -6,7 +6,7 @@ import os
 from datetime import date
 from db_connector import run_query
 from agents.orchestrator import RESNOrchestrator
-st.sidebar.write(f"DEBUG: Host is {os.getenv('DB_HOST')[:5]}...")
+
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
