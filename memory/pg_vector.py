@@ -5,6 +5,7 @@ from db_connector import run_query
 
 class PGVectorMemory:
     def __init__(self):
+        # Assumes OPENAI_API_KEY is available in your environment/secrets
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         # Using the high-performance small model
         self.model = "text-embedding-3-small" 
@@ -25,9 +26,10 @@ class PGVectorMemory:
         embedding = self._get_embedding(context_summary)
         if not embedding: return False
 
+        # FIX: Added ::vector cast to the third parameter
         sql = """
             INSERT INTO agent_memory (student_id, context_summary, embedding, metadata)
-            VALUES (%s, %s, %s, %s)
+            VALUES (%s, %s, %s::vector, %s)
         """
         metadata_json = json.dumps(metadata) if metadata else None
         return run_query(sql, (student_id, context_summary, embedding, metadata_json), is_write=True)
@@ -36,9 +38,10 @@ class PGVectorMemory:
         query_embedding = self._get_embedding(query_text)
         if not query_embedding: return []
 
+        # FIX: Added ::vector cast to the embedding parameter
         sql = """
             SELECT context_summary, metadata, created_at,
-                   (embedding <=> %s) as distance
+                   (embedding <=> %s::vector) as distance
             FROM agent_memory
             WHERE student_id = %s
             ORDER BY distance ASC
