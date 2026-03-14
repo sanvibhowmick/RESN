@@ -1,51 +1,82 @@
 import os
-import streamlit as st
-import psycopg2
 import pandas as pd
+import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import ThreadedConnectionPool
 from dotenv import load_dotenv
 
-# Load local environment variables for local development
+# Load environment variables for local development
 load_dotenv()
 
-# --- ROBUST SECRET RETRIEVAL ---
-def get_db_secret(key, default_val):
+# Safely import Streamlit to prevent local script crashes if Streamlit isn't used
+try:
+    import streamlit as st
+    HAS_STREAMLIT = True
+except ImportError:
+    HAS_STREAMLIT = False
+
+# --- CLOUD & LOCAL CREDENTIAL HANDLER ---
+def get_credential(key, default_val=None):
     """
-    Checks Streamlit secrets first (for Cloud), then environment variables (for Local).
+    Safely fetches credentials. 
+    Prioritizes Streamlit Secrets (Cloud), then falls back to os.getenv (Local).
     """
-    if key in st.secrets:
-        return st.secrets[key]
+    if HAS_STREAMLIT:
+        try:
+            # Check if we are running inside a Streamlit app and the secret exists
+            if key in st.secrets:
+                return st.secrets[key]
+        except Exception:
+            # Fallback if st.secrets is inaccessible (e.g., running python locally)
+            pass 
+            
     return os.getenv(key, default_val)
 
-# --- CONNECTION POOL INITIALIZATION ---
+# --- INITIALIZE CONNECTION POOL ---
+db_pool = None
 try:
-    db_host = get_db_secret("DB_HOST", "localhost")
-    # Neon requires 'require' for remote connections; local dev usually 'disable'
-    is_localhost = db_host in ["localhost", "127.0.0.1", "0.0.0.0"]
-    ssl_mode = "disable" if is_localhost else "require"
+    db_host = get_credential("DB_HOST", "localhost")
+    db_name = get_credential("DB_NAME", "neondb")
+    db_user = get_credential("DB_USER", "neondb_owner")
+    db_pass = get_credential("DB_PASS", "password")
+    db_port = get_credential("DB_PORT", "5432")
+
+    # Neon requires SSL for remote connections. Localhost does not.
+    ssl_mode = "disable" if db_host in ["localhost", "127.0.0.1", "0.0.0.0"] else "require"
 
     db_pool = ThreadedConnectionPool(
         minconn=1,
         maxconn=10,
         host=db_host,
-        database=get_db_secret("DB_NAME", "resn_school"),
-        user=get_db_secret("DB_USER", "admin"),
-        password=get_db_secret("DB_PASS", "password"),
-        port=get_db_secret("DB_PORT", "5432"),
+        database=db_name,
+        user=db_user,
+        password=db_pass,
+        port=db_port,
         sslmode=ssl_mode
     )
-    print(f"✅ Connection pool initialized (Host: {db_host}, SSL: {ssl_mode})")
+    print(f"✅ Connection pool initialized (Host: {db_host[:15]}..., DB: {db_name}, SSL: {ssl_mode})")
 except Exception as e:
-    # On Streamlit Cloud, it's better to show the error so you can debug
-    st.error(f"❌ Database Pool Error: {e}")
-    db_pool = None
+    error_msg = f"❌ Connection Pool Failed: {e}"
+    print(error_msg)
+    if HAS_STREAMLIT:
+        try:
+            st.error(error_msg)
+        except Exception:
+            pass
 
+# --- QUERY EXECUTION ---
 def run_query(query, params=None, is_write=False, return_dict=True):
     """
-    Executes SQL queries using the connection pool.
+    Executes SQL queries safely using the connection pool.
     """
     if not db_pool:
+        error_msg = "Database connection pool is not initialized. Check your credentials."
+        print(error_msg)
+        if HAS_STREAMLIT:
+            try:
+                st.error(error_msg)
+            except Exception:
+                pass
         if is_write: return False
         return [] if return_dict else pd.DataFrame()
 
@@ -77,16 +108,26 @@ def run_query(query, params=None, is_write=False, return_dict=True):
     except Exception as e:
         if conn:
             conn.rollback()
-        # Printing to Streamlit to catch silent errors in the Cloud
-        st.error(f"❌ Query Failed: {str(e)}")
+        error_msg = f"❌ Query Failed: {str(e)}"
+        print(error_msg)
+        if HAS_STREAMLIT:
+            try:
+                st.error(error_msg) # Shows the exact DB error in the cloud UI
+            except Exception:
+                pass
         if is_write: return False
         return [] if return_dict else pd.DataFrame() 
     finally:
         if conn:
             db_pool.putconn(conn)
 
+# --- DATABASE INITIALIZATION ---
 def init_db():
     """Initializes tables using a single pooled connection."""
+    if not db_pool:
+        print("❌ Cannot initialize DB: No connection pool.")
+        return
+
     try:
         schema_path = os.path.join('init_db', 'schema.sql')
         if not os.path.exists(schema_path):
@@ -101,7 +142,7 @@ def init_db():
         conn.commit()
         cur.close()
         db_pool.putconn(conn)
-        print("✅ Database tables and pgvector initialized!")
+        print("✅ Database tables initialized successfully!")
     except Exception as e:
         print(f"❌ Error initializing DB: {e}")
 
