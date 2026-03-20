@@ -3,7 +3,7 @@
 
 RESN is an end-to-end AI platform designed to identify at-risk students in rural communities and automate targeted, localized interventions. By bridging the gap between raw predictive analytics and human-centric support, the system provides a comprehensive "safety net" through automated scholarship matching, multilingual parent counseling, and teacher remediation planning.
 
-[Live Demo](#https://resnbysanvi.streamlit.app/) 
+https://resnbysanvi.streamlit.app/
 
 ---
 
