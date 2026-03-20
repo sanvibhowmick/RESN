@@ -54,7 +54,7 @@ A central **Orchestrator** manages the flow of information between specialized a
 |---|---|
 | Languages | Python, SQL |
 | ML Frameworks | PyTorch, Scikit-learn, Optuna |
-| AI Orchestration | OpenAI API (GPT-4o/mini), LangChain,LangGraph |
+| AI Orchestration | OpenAI API (GPT-4o/mini), LangChain|
 | Database | PostgreSQL, pgvector |
 | Deployment | Docker, Streamlit |
 
