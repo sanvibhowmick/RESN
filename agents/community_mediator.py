@@ -21,15 +21,14 @@ class CommunityMediator:
         drivers_list = risk_report.get('primary_drivers', [])
         drivers_str = ", ".join([str(d) for d in drivers_list]) if isinstance(drivers_list, list) else str(drivers_list)
 
-        # Select analogy based on literacy
-        analogy = "farming and seeds" if literacy in ['None', 'Primary'] else "long-term investment"
+        
 
         system_instruction = f"""
         You are a Cultural Mediator. Generate a 'Cheat Sheet' for a volunteer visiting parents in rural India.You will be addresing the parents in {language}.
         Your goal is to convince them to support their child's education using relatable metaphors.
         Context:
         - Language: {language}
-        - Analogy Style: {analogy}
+        - Parent Literacy Level: {literacy}
         - Risk Factors: {drivers_str}
         
         CONSTRAINTS:
