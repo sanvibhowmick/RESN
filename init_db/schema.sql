@@ -22,7 +22,20 @@ CREATE TABLE students (
   gender TEXT,          -- 'Male', 'Female'
   caste_category TEXT,  -- 'SC', 'ST', 'OBC', 'General'
   annual_income INT,
-  grade INT
+  grade INT,
+  age INT,
+  -- ==========================================
+  -- Household & Location features
+  -- Added to match the feature space the dropout_model.pth was trained on
+  -- (previously hardcoded/defaulted in risk_analyst.py because the schema
+  -- didn't capture them at all — see RESN_Interview_Prep.md)
+  -- ==========================================
+  hh_size INT,                  -- Total household size (number of people)
+  hh_children INT,               -- Number of children in the household
+  school_distanceKm FLOAT,       -- Distance from home to school, in km
+  home_language TEXT,            -- Primary language spoken at home
+  hh_occupation TEXT,            -- Primary household occupation (e.g., 'Farming', 'Daily Wage Labor')
+  location_name TEXT             -- Village/town/settlement type (e.g., 'Rural', 'Semi-Urban', 'Urban')
 );
 
 CREATE TABLE attendance (

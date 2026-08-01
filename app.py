@@ -194,11 +194,12 @@ elif page == "📝 Data Entry":
     
     with tab1:
         with st.form("manual_entry", clear_on_submit=True):
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.subheader("Profile Info")
                 name = st.text_input("Full Name")
                 gender = st.selectbox("Gender", ["Male", "Female", "Other"])
+                age = st.number_input("Age", 5, 20, 15)
                 grade = st.number_input("Grade", 1, 12, 9)
                 income = st.number_input("Annual Income", 0, 1000000, 50000)
                 caste = st.selectbox("Caste", ["General", "OBC", "SC", "ST"])
@@ -215,13 +216,25 @@ elif page == "📝 Data Entry":
                 exam_subject = st.text_input("Exam Subject", "General")
                 exam_score = st.number_input("Exam Score", 0, 100, 75)
                 exam_date = st.date_input("Exam Date", date.today())
+            with col4:
+                st.subheader("Household & Location")
+                hh_size = st.number_input("Household Size", 1, 20, 5)
+                hh_children = st.number_input("Children in Household", 0, 15, 2)
+                school_distance_km = st.number_input("Distance to School (km)", 0.0, 50.0, 2.0, step=0.5)
+                home_language = st.selectbox("Home Language", ["Hindi", "Bengali", "Marathi", "Tamil", "Telugu", "Kannada", "Other"])
+                hh_occupation = st.selectbox("Household Occupation", ["Farming", "Daily Wage Labor", "Small Business", "Salaried", "Other"])
+                location_name = st.selectbox("Location Type", ["Rural", "Semi-Urban", "Urban"])
             
             if st.form_submit_button("💾 Save Record", type="primary"):
                 if name:
                     sid = run_query("""
-                        INSERT INTO students (name, grade, annual_income, caste_category, gender) 
-                        VALUES (%s, %s, %s, %s, %s) RETURNING student_id
-                    """, (name, grade, income, caste, gender), is_write=True)
+                        INSERT INTO students (name, grade, annual_income, caste_category, gender, age,
+                                               hh_size, hh_children, school_distanceKm, home_language,
+                                               hh_occupation, location_name) 
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING student_id
+                    """, (name, grade, income, caste, gender, age,
+                          hh_size, hh_children, school_distance_km, home_language,
+                          hh_occupation, location_name), is_write=True)
                     
                     if sid:
                         # 1. Social Risk Factors
@@ -255,6 +268,7 @@ elif page == "📝 Data Entry":
             sample_data = {
                 "name": ["Aarav Kumar"],
                 "grade": [9],
+                "age": [15],
                 "income": [50000],
                 "caste": ["General"],
                 "gender": ["Male"],
@@ -266,7 +280,13 @@ elif page == "📝 Data Entry":
                 "score": [88],
                 "is_migrant": [False],
                 "is_laborer": [False],
-                "is_sibling_dropout": [False]
+                "is_sibling_dropout": [False],
+                "hh_size": [5],
+                "hh_children": [2],
+                "school_distanceKm": [2.5],
+                "home_language": ["Hindi"],
+                "hh_occupation": ["Farming"],
+                "location_name": ["Rural"]
             }
             sample_df = pd.DataFrame(sample_data)
             st.dataframe(sample_df)
@@ -283,9 +303,16 @@ elif page == "📝 Data Entry":
                 progress = st.progress(0)
                 for idx, row in df.iterrows():
                     sid = run_query("""
-                        INSERT INTO students (name, grade, annual_income, caste_category, gender) 
-                        VALUES (%s, %s, %s, %s, %s) RETURNING student_id
-                    """, (row['name'], row['grade'], row['income'], row['caste'], row['gender']), is_write=True)
+                        INSERT INTO students (name, grade, annual_income, caste_category, gender, age,
+                                               hh_size, hh_children, school_distanceKm, home_language,
+                                               hh_occupation, location_name) 
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING student_id
+                    """, (row['name'], row['grade'], row['income'], row['caste'], row['gender'],
+                          row.get('age', 15),
+                          row.get('hh_size', 5), row.get('hh_children', 2),
+                          row.get('school_distanceKm', 2.0), row.get('home_language', 'Unknown'),
+                          row.get('hh_occupation', 'Unknown'), row.get('location_name', 'Rural')),
+                          is_write=True)
                     
                     if sid:
                         # Social Risk Factors
