@@ -31,6 +31,10 @@ st.markdown("""
     .status-high { background-color: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; }
     .status-warn { background-color: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; }
     .status-safe { background-color: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; }
+    .similar-case-tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; margin-right: 8px; }
+    .tag-danger { background-color: #FEF2F2; color: #B91C1C; }
+    .tag-watch { background-color: #FFFBEB; color: #B45309; }
+    .tag-normal { background-color: #ECFDF5; color: #047857; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -180,6 +184,52 @@ elif page == "🚨 Intervention Center":
                                         st.error(f"❌ {action['data']['error']}")
                                     else:
                                         st.write(action['data'])
+
+                    # --- SIMILAR PAST CASES (cross-student semantic memory) ---
+                    # Identities are intentionally withheld: only status, a
+                    # similarity score, and the free-text summary are shown.
+                    # This surfaces institutional memory for a caseworker's
+                    # own judgment, without the pipeline acting on it directly.
+                    similar_cases = result.get('similar_cases') or []
+                    st.markdown('<div class="section-title">🔎 Similar Past Cases</div>', unsafe_allow_html=True)
+                    if similar_cases:
+                        st.caption(
+                            "Other students whose situations most closely match this case, "
+                            "for reference only — names and IDs are not shown."
+                        )
+                        tag_map = {
+                            "DANGER": ("tag-danger", "🔴"),
+                            "WATCH": ("tag-watch", "🟡"),
+                            "NORMAL": ("tag-normal", "🟢"),
+                        }
+                        for i, case in enumerate(similar_cases, start=1):
+                            meta = case.get('metadata') or {}
+                            case_status = str(meta.get('status', 'N/A')).upper()
+                            case_score = meta.get('score', 'N/A')
+                            tag_class, tag_emoji = tag_map.get(case_status, ("tag-normal", "⚪"))
+
+                            distance = case.get('distance')
+                            match_pct = None
+                            if distance is not None:
+                                match_pct = max(0, min(100, round((1 - float(distance)) * 100)))
+
+                            created = case.get('created_at')
+                            created_str = str(created)[:10] if created else "unknown date"
+
+                            header = f"Case {i} — {tag_emoji} {case_status}"
+                            if match_pct is not None:
+                                header += f" · {match_pct}% match"
+
+                            with st.expander(header):
+                                st.markdown(
+                                    f'<span class="similar-case-tag {tag_class}">{case_status}</span>'
+                                    f'<span style="color:#64748B; font-size:0.85rem;">Risk score: {case_score} &nbsp;|&nbsp; Logged: {created_str}</span>',
+                                    unsafe_allow_html=True
+                                )
+                                st.write(case.get('context_summary', 'No summary available.'))
+                    else:
+                        st.info("No comparable past cases yet — this pattern hasn't been logged before.")
+
                 except Exception as e:
                     st.error(f"Analysis Failed: {e}")
     else:
