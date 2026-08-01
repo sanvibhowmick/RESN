@@ -66,30 +66,42 @@ class RiskAnalyst:
         attendance = student_data.get('attendance_history', [])
         latest_att = attendance[0].get('attendance_percent', 85.0) if attendance else 85.0
         
+        # Updated to perfectly map the Streamlit UI to the new Kaggle feature space
         raw_vals = {
-            'grade': profile.get('grade', 0),
-            'gender': profile.get('gender', 'Other'),
-            'annual_income': profile.get('annual_income', 0),
+            # Base numeric features expected by the updated model
+            'grade': profile.get('grade', 10),
+            'age': profile.get('age', 15), 
+            'income': profile.get('annual_income', 0), # Explicitly mapped to 'income' for Kaggle
             'attendance': latest_att,
             'hh_size': 5,  
             'school_distanceKm': 2.0,  
-            'hh_children': 3,  
-            'mothers_edu': social.get('parent_education_level', 'None'),
-            'hh_edu': social.get('parent_education_level', 'None'),
+            'hh_children': 3,
             'migrant_family': 1 if social.get('migrant_family') else 0,
             'seasonal_labor': 1 if social.get('seasonal_labor') else 0,
-            'sibling_dropout': 1 if social.get('sibling_dropout') else 0
+            'sibling_dropout': 1 if social.get('sibling_dropout') else 0,
+            
+            # Base categorical features that will be evaluated for one-hot encoding
+            'gender': profile.get('gender', 'Unknown'),
+            'mothers_edu': social.get('parent_education_level', 'Unknown'),
+            'hh_edu': social.get('parent_education_level', 'Unknown'),
+            'location_name': 'Rural', # Default for RESN context
+            'home_language': 'Unknown',
+            'hh_occupation': 'Unknown',
+            'meansToSchool': 'Unknown'
         }
 
         input_row = []
         for feat in self.features_list:
-            if feat in raw_vals:
+            if feat in raw_vals and not isinstance(raw_vals.get(feat), str):
+                # Captures exact numeric matches (e.g., 'attendance', 'income')
                 input_row.append(float(raw_vals[feat]))
             elif "_" in feat:
+                # Handles the one-hot encoded columns (e.g., 'gender_Male', 'hh_edu_Secondary')
                 base_col, category = feat.rsplit("_", 1)
-                val = 1.0 if str(raw_vals.get(base_col)) == category else 0.0
+                val = 1.0 if str(raw_vals.get(base_col, "")) == category else 0.0
                 input_row.append(val)
             else:
+                # Fallback for unexpected features
                 input_row.append(0.0)
 
         scaled_data = self.scaler.transform([input_row])
