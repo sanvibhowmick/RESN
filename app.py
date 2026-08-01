@@ -4,7 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 from datetime import date
-from db_connector import run_query
+from db_connector import run_query, run_transaction
 from agents.orchestrator import RESNOrchestrator
 
 
@@ -227,37 +227,43 @@ elif page == "📝 Data Entry":
             
             if st.form_submit_button("💾 Save Record", type="primary"):
                 if name:
-                    sid = run_query("""
-                        INSERT INTO students (name, grade, annual_income, caste_category, gender, age,
-                                               hh_size, hh_children, school_distanceKm, home_language,
-                                               hh_occupation, location_name) 
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING student_id
-                    """, (name, grade, income, caste, gender, age,
-                          hh_size, hh_children, school_distance_km, home_language,
-                          hh_occupation, location_name), is_write=True)
-                    
-                    if sid:
-                        # 1. Social Risk Factors
-                        run_query("""
-                            INSERT INTO social_risk (student_id, parent_education_level, migrant_family, seasonal_labor, sibling_dropout) 
+                    # All four inserts run as ONE atomic transaction:
+                    # either the full student record lands, or none of it does.
+                    tx = run_transaction([
+                        ("""
+                            INSERT INTO students (name, grade, annual_income, caste_category, gender, age,
+                                                   hh_size, hh_children, school_distanceKm, home_language,
+                                                   hh_occupation, location_name)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING student_id
+                        """, (name, grade, income, caste, gender, age,
+                              hh_size, hh_children, school_distance_km, home_language,
+                              hh_occupation, location_name)),
+
+                        ("""
+                            INSERT INTO social_risk (student_id, parent_education_level, migrant_family, seasonal_labor, sibling_dropout)
                             VALUES (%s, %s, %s, %s, %s)
-                        """, (sid, parent_edu, migrant, laborer, dropout), is_write=True)
-                        
-                        # 2. Attendance with Month
-                        run_query("""
-                            INSERT INTO attendance (student_id, month, attendance_percent) 
+                        """, lambda results: (results[0], parent_edu, migrant, laborer, dropout)),
+
+                        ("""
+                            INSERT INTO attendance (student_id, month, attendance_percent)
                             VALUES (%s, %s, %s)
-                        """, (sid, att_month, attendance), is_write=True)
-                        
-                        # 3. Exam Score with Subject and Date
-                        run_query("""
-                            INSERT INTO exam_scores (student_id, subject, exam_date, score) 
+                        """, lambda results: (results[0], att_month, attendance)),
+
+                        ("""
+                            INSERT INTO exam_scores (student_id, subject, exam_date, score)
                             VALUES (%s, %s, %s, %s)
-                        """, (sid, exam_subject, exam_date, exam_score), is_write=True)
-                        
+                        """, lambda results: (results[0], exam_subject, exam_date, exam_score)),
+                    ])
+
+                    if tx["ok"]:
+                        new_sid = tx["results"][0]
                         st.cache_data.clear()
-                        st.success(f"Added Student ID: {sid}")
+                        st.success(f"Added Student ID: {new_sid}")
                         st.rerun()
+                    else:
+                        st.error(f"❌ Save failed — no record was created (rolled back). Details: {tx['error']}")
+                else:
+                    st.warning("⚠️ Full Name is required.")
 
     with tab2:
         st.markdown("#### 📂 Bulk CSV Upload")
@@ -299,42 +305,75 @@ elif page == "📝 Data Entry":
         if uploaded_file:
             df = pd.read_csv(uploaded_file)
             st.dataframe(df.head())
-            if st.button("🚀 Process & Upload", type="primary"):
+
+            # Required columns — fail fast with one clear message instead of
+            # crashing mid-batch on a KeyError partway through the loop.
+            REQUIRED_COLS = [
+                "name", "grade", "income", "caste", "gender", "parent_edu", "attendance", "score"
+            ]
+            missing_cols = [c for c in REQUIRED_COLS if c not in df.columns]
+
+            if missing_cols:
+                st.error(f"❌ CSV is missing required column(s): {', '.join(missing_cols)}. "
+                          f"Download the template above for the exact format.")
+            elif st.button("🚀 Process & Upload", type="primary"):
                 progress = st.progress(0)
+                success_rows, failed_rows = [], []
+
                 for idx, row in df.iterrows():
-                    sid = run_query("""
-                        INSERT INTO students (name, grade, annual_income, caste_category, gender, age,
-                                               hh_size, hh_children, school_distanceKm, home_language,
-                                               hh_occupation, location_name) 
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING student_id
-                    """, (row['name'], row['grade'], row['income'], row['caste'], row['gender'],
-                          row.get('age', 15),
-                          row.get('hh_size', 5), row.get('hh_children', 2),
-                          row.get('school_distanceKm', 2.0), row.get('home_language', 'Unknown'),
-                          row.get('hh_occupation', 'Unknown'), row.get('location_name', 'Rural')),
-                          is_write=True)
-                    
-                    if sid:
-                        # Social Risk Factors
-                        run_query("""
-                            INSERT INTO social_risk (student_id, parent_education_level, migrant_family, seasonal_labor, sibling_dropout) 
+                    tx = run_transaction([
+                        ("""
+                            INSERT INTO students (name, grade, annual_income, caste_category, gender, age,
+                                                   hh_size, hh_children, school_distanceKm, home_language,
+                                                   hh_occupation, location_name)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING student_id
+                        """, (row['name'], row['grade'], row['income'], row['caste'], row['gender'],
+                              row.get('age', 15),
+                              row.get('hh_size', 5), row.get('hh_children', 2),
+                              row.get('school_distanceKm', 2.0), row.get('home_language', 'Unknown'),
+                              row.get('hh_occupation', 'Unknown'), row.get('location_name', 'Rural'))),
+
+                        ("""
+                            INSERT INTO social_risk (student_id, parent_education_level, migrant_family, seasonal_labor, sibling_dropout)
                             VALUES (%s, %s, %s, %s, %s)
-                        """, (sid, row['parent_edu'], bool(row.get('is_migrant')), bool(row.get('is_laborer')), bool(row.get('is_sibling_dropout'))), is_write=True)
-                        
-                        # Updated Attendance with month support
-                        run_query("""
-                            INSERT INTO attendance (student_id, month, attendance_percent) 
+                        """, lambda results, r=row: (
+                            results[0], r['parent_edu'], bool(r.get('is_migrant')),
+                            bool(r.get('is_laborer')), bool(r.get('is_sibling_dropout'))
+                        )),
+
+                        ("""
+                            INSERT INTO attendance (student_id, month, attendance_percent)
                             VALUES (%s, %s, %s)
-                        """, (sid, row.get('att_month', date.today().strftime('%Y-%m-01')), row['attendance']), is_write=True)
-                        
-                        # Updated Exam Scores with subject and date support
-                        run_query("""
-                            INSERT INTO exam_scores (student_id, subject, exam_date, score) 
+                        """, lambda results, r=row: (
+                            results[0], r.get('att_month', date.today().strftime('%Y-%m-01')), r['attendance']
+                        )),
+
+                        ("""
+                            INSERT INTO exam_scores (student_id, subject, exam_date, score)
                             VALUES (%s, %s, %s, %s)
-                        """, (sid, row.get('exam_subject', 'General'), row.get('exam_date', date.today().strftime('%Y-%m-%d')), row['score']), is_write=True)
-                    
+                        """, lambda results, r=row: (
+                            results[0], r.get('exam_subject', 'General'),
+                            r.get('exam_date', date.today().strftime('%Y-%m-%d')), r['score']
+                        )),
+                    ])
+
+                    if tx["ok"]:
+                        success_rows.append(idx)
+                    else:
+                        failed_rows.append((idx, row.get('name', f'row {idx}'), tx['error']))
+
                     progress.progress((idx + 1) / len(df))
-                
+
                 st.cache_data.clear()
-                st.success("Batch Upload Successful!")
+
+                if failed_rows:
+                    st.warning(f"⚠️ Upload finished with errors: {len(success_rows)} succeeded, "
+                               f"{len(failed_rows)} failed (each failed row was fully rolled back — "
+                               f"no partial records).")
+                    with st.expander("View failed rows"):
+                        for row_idx, row_name, err in failed_rows:
+                            st.write(f"Row {row_idx} ({row_name}): {err}")
+                else:
+                    st.success(f"✅ Batch Upload Successful! {len(success_rows)} student records added.")
+
                 st.rerun()
