@@ -38,12 +38,23 @@ class RESNOrchestrator:
             metadata={"status": risk_report.get('status'), "score": risk_report.get('risk_score')}
         )
 
+        # Cross-student lookup: find OTHER students whose past summaries are
+        # semantically similar to THIS student's current situation, using
+        # this run's own summary as the query so it reflects the live case
+        # rather than a fixed generic phrase.
+        similar_cases = self.memory.find_similar_cases(
+            query_text=risk_report.get('summary_for_memory', ''),
+            exclude_student_id=student_id,
+            limit=3
+        )
+
         # ✅ CRITICAL FIX: Sanitize the string so "Watch", "WATCH ", and "watch" are all treated equally
         raw_status = risk_report.get('status', 'NORMAL')
         status = str(raw_status).strip().upper() 
 
         results = {
             "analysis": risk_report,
+            "similar_cases": similar_cases,
             "actions": []
         }
 

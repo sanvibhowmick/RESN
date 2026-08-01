@@ -48,3 +48,40 @@ class PGVectorMemory:
             LIMIT %s;
         """
         return run_query(sql, (query_embedding, student_id, limit), return_dict=True)
+
+    def find_similar_cases(self, query_text, exclude_student_id=None, limit=5):
+        """Semantic search ACROSS ALL STUDENTS for cases with a similar risk
+        profile/history, instead of one student's own past entries.
+
+        query_text should describe the CURRENT situation (e.g. the
+        RiskAnalyst's summary_for_memory for this run), not a fixed generic
+        phrase -- the whole point of a cross-student search is to find
+        entries whose meaning is close to what's happening right now.
+
+        exclude_student_id lets you exclude the current student's own
+        memories, so results are genuinely "other students like this one."
+        """
+        query_embedding = self._get_embedding(query_text)
+        if not query_embedding: return []
+
+        if exclude_student_id is not None:
+            sql = """
+                SELECT student_id, context_summary, metadata, created_at,
+                       (embedding <=> %s::vector) as distance
+                FROM agent_memory
+                WHERE student_id != %s
+                ORDER BY distance ASC
+                LIMIT %s;
+            """
+            params = (query_embedding, exclude_student_id, limit)
+        else:
+            sql = """
+                SELECT student_id, context_summary, metadata, created_at,
+                       (embedding <=> %s::vector) as distance
+                FROM agent_memory
+                ORDER BY distance ASC
+                LIMIT %s;
+            """
+            params = (query_embedding, limit)
+
+        return run_query(sql, params, return_dict=True)
