@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from agents.risk_analyst import RiskAnalyst
 from agents.financial_adv import FinancialAdvocate
 from agents.educator import Educator
@@ -15,6 +16,36 @@ class RESNOrchestrator:
         self.finance = FinancialAdvocate()
         self.educator = Educator()
         self.mediator = CommunityMediator()
+
+    async def _run_danger_path_parallel(self, student_id, student_data, risk_report, counseling_lang):
+        """
+        Runs the three DANGER-path specialists concurrently instead of
+        sequentially. FinancialAdvocate / CommunityMediator / Educator each
+        only depend on `risk_report` (already computed), not on each
+        other's output, so there's no ordering requirement between them --
+        they were only running one-after-another before because the code
+        called them in sequence, not because they needed to be.
+
+        The OpenAI client used inside each agent is synchronous, so each
+        call is dispatched to its own thread via asyncio.to_thread and
+        awaited together with asyncio.gather, rather than rewriting all
+        three agents onto AsyncOpenAI.
+        """
+        finance_task = asyncio.to_thread(
+            self.finance.provide_support, student_id, student_data, risk_report
+        )
+        mediator_task = asyncio.to_thread(
+            self.mediator.generate_counseling_script,
+            student_id, student_data, risk_report, counseling_lang
+        )
+        educator_task = asyncio.to_thread(
+            self.educator.create_remedial_plan, student_id, student_data, risk_report
+        )
+
+        finance_result, mediator_result, edu_result = await asyncio.gather(
+            finance_task, mediator_task, educator_task
+        )
+        return finance_result, mediator_result, edu_result
 
     def run_intervention_pipeline(self, student_id, counseling_lang="Hindi"):
         """
@@ -60,20 +91,17 @@ class RESNOrchestrator:
 
         # 3. Level 2: Conditional Intervention Triage
         
-        # --- PATH A: DANGER (Counseling + Scholarship + Remedial) ---
+        # --- PATH A: DANGER (Counseling + Scholarship + Remedial, IN PARALLEL) ---
         if status == "DANGER":
-            # Financial Support
-            finance_result = self.finance.provide_support(student_id, student_data, risk_report)
-            results['actions'].append({"type": "finance", "data": finance_result})
-
-            # Community Counseling Script
-            mediator_result = self.mediator.generate_counseling_script(
-                student_id, student_data, risk_report, language=counseling_lang
+            finance_result, mediator_result, edu_result = asyncio.run(
+                self._run_danger_path_parallel(student_id, student_data, risk_report, counseling_lang)
             )
-            results['actions'].append({"type": "counseling", "data": mediator_result})
 
-            # Academic Remedial Plan
-            edu_result = self.educator.create_remedial_plan(student_id, student_data, risk_report)
+            # Preserve the original ordering (finance, counseling, academic)
+            # in the returned actions list even though the calls themselves
+            # ran concurrently, so app.py's rendering doesn't need to change.
+            results['actions'].append({"type": "finance", "data": finance_result})
+            results['actions'].append({"type": "counseling", "data": mediator_result})
             results['actions'].append({"type": "academic", "data": edu_result})
 
         # --- PATH B: WATCH STATUS (Remedial Only) ---
