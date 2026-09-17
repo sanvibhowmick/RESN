@@ -30,7 +30,7 @@ https://resnbysanvi.streamlit.app/
 
 The system's foundation is a PyTorch Neural Network featuring a residual architecture designed to handle imbalanced socio-educational datasets.
 
-- **Performance:** Achieved 0.98 Recall and 0.98 ROC-AUC.
+- **Performance:** Achieved 0.98 Recall and 0.99 ROC-AUC on the training dataset. Note: these metrics were obtained using synthetically augmented features and may not reflect real-world performance; see `RESN_NOTEBOOK.ipynb` for details.
 - **Optimization:** Utilized Optuna for systematic hyperparameter tuning, focusing on architectural parameters like layer depth, unit counts, and dropout rates to ensure reliable detection of the minority "at-risk" class.
 
 ### 2. Intelligent Agent Triage
@@ -54,7 +54,7 @@ A central **Orchestrator** manages the flow of information between specialized a
 |---|---|
 | Languages | Python, SQL |
 | ML Frameworks | PyTorch, Scikit-learn, Optuna |
-| AI Orchestration | OpenAI API (GPT-4o/mini), LangChain|
+| AI Orchestration | OpenAI API (GPT-4o/mini), Custom Python Orchestrator |
 | Database | PostgreSQL, pgvector |
 | Deployment | Docker, Streamlit |
 
@@ -78,12 +78,19 @@ DB_USER=admin
 DB_PASS=password
 ```
 
-**3. Deploy via Docker:**
+**3. Start the Database:**
 ```bash
 docker-compose up --build
 ```
+This starts only the PostgreSQL database with pgvector. The Streamlit app runs separately.
 
-**4. Access the Dashboard:**
+**4. Run the Application:**
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+**5. Access the Dashboard:**
 Open `http://localhost:8501` to view the RESN Intervention Center.
 
 ---

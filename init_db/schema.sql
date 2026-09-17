@@ -18,12 +18,12 @@ DROP TABLE IF EXISTS students;
 -- ==========================================
 CREATE TABLE students (
   student_id SERIAL PRIMARY KEY,
-  name TEXT,
-  gender TEXT,          -- 'Male', 'Female'
+  name TEXT NOT NULL,
+  gender TEXT CHECK (gender IN ('Male', 'Female', 'Other')),          -- 'Male', 'Female'
   caste_category TEXT,  -- 'SC', 'ST', 'OBC', 'General'
   annual_income INT,
-  grade INT,
-  age INT,
+  grade INT CHECK (grade BETWEEN 1 AND 12),
+  age INT CHECK (age BETWEEN 3 AND 25),
   -- ==========================================
   -- Household & Location features
   -- Added to match the feature space the dropout_model.pth was trained on
@@ -42,7 +42,7 @@ CREATE TABLE attendance (
   record_id SERIAL PRIMARY KEY,
   student_id INT REFERENCES students(student_id) ON DELETE CASCADE,
   month DATE,
-  attendance_percent FLOAT
+  attendance_percent FLOAT CHECK (attendance_percent BETWEEN 0 AND 100)
 );
 
 CREATE TABLE exam_scores (
@@ -50,7 +50,7 @@ CREATE TABLE exam_scores (
   student_id INT REFERENCES students(student_id) ON DELETE CASCADE,
   subject TEXT,
   exam_date DATE,
-  score FLOAT
+  score FLOAT CHECK (score BETWEEN 0 AND 100)
 );
 
 CREATE TABLE social_risk (
@@ -96,6 +96,22 @@ CREATE TABLE agent_memory (
   metadata JSONB,       -- Extra details (e.g., emotion, specific concerns)
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ==========================================
+-- 3. PERFORMANCE INDEXES
+-- ==========================================
+-- Speed up the WHERE student_id = %s lookups that every agent query uses.
+CREATE INDEX idx_attendance_student_id ON attendance(student_id);
+CREATE INDEX idx_exam_scores_student_id ON exam_scores(student_id);
+CREATE INDEX idx_social_risk_student_id ON social_risk(student_id);
+CREATE INDEX idx_interventions_student_id ON interventions(student_id);
+CREATE INDEX idx_agent_memory_student_id ON agent_memory(student_id);
+
+-- NOTE: ivfflat index quality degrades as row count grows significantly
+-- past what it was built for. Run REINDEX once data grows past ~10k rows.
+CREATE INDEX idx_agent_memory_embedding
+  ON agent_memory USING ivfflat (embedding vector_cosine_ops)
+  WITH (lists = 100);
 
 INSERT INTO schemes 
 (scheme_name, min_grade, max_grade, income_limit, caste_category, gender)

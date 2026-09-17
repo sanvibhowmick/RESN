@@ -132,6 +132,186 @@ class RiskAnalyst:
         self.risk_model.load_state_dict(state_dict)
         self.risk_model.eval()
 
+    # ------------------------------------------------------------------
+    # MAPPING LAYER: Production DB values → Trained model vocabulary
+    # ------------------------------------------------------------------
+    # The model was trained on the Kaggle "Secondary School Dropout" dataset
+    # which uses East African categories (Form One/Two/Three, Kiswahili,
+    # km-range buckets as strings, etc.).  The production schema stores
+    # Indian values (numeric grade 1-12, Hindi/Bengali/Marathi, float km).
+    #
+    # Each mapping below is a documented judgment call — these are
+    # approximate equivalences, not exact translations.  If the model is
+    # retrained on real Indian-schema data, this entire layer can be
+    # removed.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _bucket_distance_km(km):
+        """Map a numeric km distance to the trained model's range-string.
+
+        Trained buckets: '0.5-1 km', '1-2 km', '2-3 km', '4-5 km',
+                         '6-7 km', '7-10 km', 'More than 11 km'.
+        Note: there is no '0-0.5 km' or '3-4 km' bucket in the trained
+        vocabulary — distances in those gaps fall through to 0 (no bucket
+        activated), which is acceptable since the model still has the raw
+        numeric features.
+        """
+        if km is None:
+            return "2-3 km"  # dataset-mean fallback
+        km = float(km)
+        if 0.5 <= km < 1:
+            return "0.5-1 km"
+        elif 1 <= km < 2:
+            return "1-2 km"
+        elif 2 <= km < 3:
+            return "2-3 km"
+        elif 4 <= km < 5:
+            return "4-5 km"
+        elif 6 <= km < 7:
+            return "6-7 km"
+        elif 7 <= km < 10:
+            return "7-10 km"
+        elif km >= 11:
+            return "More than 11 km"
+        else:
+            # 0-0.5 km and 3-4 km: no matching bucket in training vocab
+            return None
+
+    @staticmethod
+    def _map_grade_to_form(grade):
+        """Map Indian grade number to Tanzanian 'Form' equivalent.
+
+        The Kaggle dataset uses Form One (≈ grade 9-10 in Indian system),
+        Form Two (≈ grade 11), Form Three (≈ grade 12).  Grades below 9
+        have no trained equivalent — they map to None (no one-hot fires).
+        """
+        if grade is None:
+            return None
+        grade = int(grade)
+        if grade in (9, 10):
+            return "Form One"
+        elif grade == 11:
+            return "Form Two"
+        elif grade == 12:
+            return "Form Three"
+        return None  # grades 1-8: no equivalent in trained vocab
+
+    @staticmethod
+    def _map_int_to_child_bucket(n):
+        """Map an integer count to the trained household-size/children bucket.
+
+        Trained buckets: 'Two Children', 'Three Children', 'Four Children',
+                         'More than five'.
+        Note: 'One Child' is not in the vocabulary — single-child maps to
+        None (baseline category in the original one-hot encoding).
+        """
+        if n is None:
+            return None
+        n = int(n)
+        if n == 2:
+            return "Two Children"
+        elif n == 3:
+            return "Three Children"
+        elif n == 4:
+            return "Four Children"
+        elif n >= 5:
+            return "More than five"
+        return None  # 0 or 1: baseline (dropped) category
+
+    def _map_production_values_to_training_vocab(self, raw_vals):
+        """Transform real production DB values into the trained model's
+        categorical vocabulary so the one-hot comparison can match.
+
+        Returns a new dict with string values replaced by their trained-vocab
+        equivalents.  Numeric features (age, attendance, income, binary flags)
+        are passed through unchanged.
+        """
+        mapped = dict(raw_vals)  # shallow copy
+
+        # --- school_distanceKm: float → km-range string ---
+        mapped["school_distanceKm"] = self._bucket_distance_km(
+            raw_vals.get("school_distanceKm")
+        )
+
+        # --- grade: int 1-12 → 'Form One/Two/Three' ---
+        mapped["grade"] = self._map_grade_to_form(raw_vals.get("grade"))
+
+        # --- home_language: Indian language → 'Native language' ---
+        # The trained vocab has 'Kiswahili' and 'Native language'.
+        # Any Indian language (Hindi, Bengali, Marathi, Tamil, etc.) is
+        # semantically closest to 'Native language' — "the student speaks
+        # a non-English local language."  'Kiswahili' is left unactivated.
+        lang = raw_vals.get("home_language")
+        if lang and lang not in ("Kiswahili", "Native language", "Unknown"):
+            mapped["home_language"] = "Native language"
+
+        # --- hh_occupation: Indian → closest trained category ---
+        # Trained: 'Housewife', 'Private sector', 'Public sector',
+        #          'Self-employed', 'Unemployed' (drop_first baseline not
+        #          listed).
+        # Production: 'Farming', 'Daily Wage Labor', 'Small Business',
+        #             'Salaried', 'Other'.
+        occ_map = {
+            # Farming/daily-wage workers are self-employed in rural India
+            "Farming": "Self-employed",
+            "Daily Wage Labor": "Self-employed",
+            # Small business maps to private sector
+            "Small Business": "Private sector",
+            # Salaried ~ public sector (most salaried rural = gov jobs)
+            "Salaried": "Public sector",
+            # 'Other' has no clean mapping — approximate as 'Unemployed'
+            # (the closest "catch-all" in the trained vocab)
+            "Other": "Unemployed",
+        }
+        occ = raw_vals.get("hh_occupation")
+        if occ in occ_map:
+            mapped["hh_occupation"] = occ_map[occ]
+        # else: keep as-is (might already be a trained-vocab value)
+
+        # --- gender: 'Male'/'Female' → 'Male' (only trained feature) ---
+        # Feature is 'gender_Male'; 'Female' naturally maps to 0.
+        # No mapping needed — 'Male' == 'Male' is already an exact match.
+
+        # --- hh_size: int → child-count bucket ---
+        mapped["hh_size"] = self._map_int_to_child_bucket(
+            raw_vals.get("hh_size")
+        )
+
+        # --- hh_children: int → child-count bucket ---
+        mapped["hh_children"] = self._map_int_to_child_bucket(
+            raw_vals.get("hh_children")
+        )
+
+        # --- mothers_edu / hh_edu: production levels → trained levels ---
+        # Trained: 'Primary', 'Secondary', 'Unknown'.
+        # Production: 'None', 'Primary', 'Secondary', 'Graduate'.
+        edu_map = {
+            "None": "Unknown",       # 'None' → 'Unknown' (no education)
+            "Primary": "Primary",    # exact match
+            "Secondary": "Secondary",  # exact match
+            "Graduate": "Secondary",  # no 'Graduate' in trained vocab;
+                                       # closest is 'Secondary' (higher-ed)
+        }
+        for key in ("mothers_edu", "hh_edu"):
+            edu = raw_vals.get(key)
+            if edu in edu_map:
+                mapped[key] = edu_map[edu]
+
+        # --- meansToSchool: not collected in production ---
+        # Default to 'Walk' — the most common means of transport in rural
+        # Indian villages.  The trained vocab has 'Walk', 'Public transport',
+        # 'Private car'.
+        if raw_vals.get("meansToSchool") in (None, "Unknown"):
+            mapped["meansToSchool"] = "Walk"
+
+        # --- location_name: 'Rural'/'Semi-Urban'/'Urban' → 'Urban' ---
+        # Only 'location_name_Urban' exists in trained features.
+        # 'Rural' and 'Semi-Urban' are the baseline (0), which is correct.
+        # No mapping needed.
+
+        return mapped
+
     def _get_ml_risk_score(self, student_data):
         """Maps data to features and generates a 0-100 score.
 
@@ -184,19 +364,48 @@ class RiskAnalyst:
             "meansToSchool": pf("meansToSchool"),
         }
 
+        # ── Map production values to training vocabulary ──
+        raw_vals = self._map_production_values_to_training_vocab(raw_vals)
+
+        # ── Build the one-hot encoded input row ──
+        # The feature list contains entries like 'age' (numeric),
+        # 'school_distanceKm_2-3 km' (one-hot), and 'gender_Male' (one-hot).
+        # For one-hot features, we need to find the correct base column and
+        # category by matching against known raw_vals keys, because a naive
+        # rsplit('_', 1) breaks on multi-segment names like
+        # 'school_distanceKm_2-3 km'.
         input_row = []
         for feat in self.features_list:
+            # Case 1: exact match on a numeric (non-string) feature
             if feat in raw_vals and not isinstance(raw_vals.get(feat), str):
                 input_row.append(float(raw_vals[feat]))
             elif "_" in feat:
-                base_col, category = feat.rsplit("_", 1)
-                val = (
-                    1.0
-                    if str(raw_vals.get(base_col, "")) == category
-                    else 0.0
-                )
-                input_row.append(val)
+                # Case 2: one-hot feature — find the base column by checking
+                # which raw_vals key is a prefix of the feature name
+                matched = False
+                for key in raw_vals:
+                    prefix = key + "_"
+                    if feat.startswith(prefix):
+                        category = feat[len(prefix):]
+                        val = (
+                            1.0
+                            if str(raw_vals.get(key, "")) == category
+                            else 0.0
+                        )
+                        input_row.append(val)
+                        matched = True
+                        break
+                if not matched:
+                    # Fallback: original rsplit behavior
+                    base_col, category = feat.rsplit("_", 1)
+                    val = (
+                        1.0
+                        if str(raw_vals.get(base_col, "")) == category
+                        else 0.0
+                    )
+                    input_row.append(val)
             else:
+                # Case 3: no underscore, no numeric match → default 0
                 input_row.append(0.0)
 
         scaled_data = self.scaler.transform([input_row])
