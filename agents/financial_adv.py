@@ -1,6 +1,7 @@
 import os
 from openai import OpenAI
 import json
+from agents.schemas import ScholarshipDecisionSchema
 from tools.db_tools import find_eligible_scholarships, record_intervention
 from tools.report_tools import generate_intervention_pdf
 
@@ -55,12 +56,12 @@ class FinancialAdvocate:
                 response_format={ "type": "json_object" }
             )
             
-            decision = json.loads(response.choices[0].message.content)
+            # Runtime validation with Pydantic
+            validated_decision = ScholarshipDecisionSchema.model_validate_json(response.choices[0].message.content)
+            decision = validated_decision.model_dump()
             scheme_name = decision['selected_scheme']
 
             # 3. Use the Report Tool to generate the PDF
-            # NOTE: If generate_intervention_pdf also uses json internally, 
-            # ensure it is updated to handle date objects.
             pdf_path = generate_intervention_pdf(
                 student_data=student_data, 
                 scheme_name=scheme_name, 
@@ -79,7 +80,9 @@ class FinancialAdvocate:
                 "action_status": "SUCCESS",
                 "scheme": scheme_name,
                 "pdf_path": pdf_path,
-                "justification": decision['justification']
+                "justification": decision['justification'],
+                "urgency": decision.get('urgency', 'High'),
+                "estimated_benefit": decision.get('estimated_benefit', 'Government Financial Aid')
             }
         
         except Exception as e:

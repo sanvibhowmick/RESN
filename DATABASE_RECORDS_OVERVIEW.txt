@@ -1,0 +1,103 @@
+========================================================================================================================
+                          RURAL EDUCATION SAFETY NET (RESN) — DATABASE RECORDS OVERVIEW
+========================================================================================================================
+Database Engine: PostgreSQL with pgvector extension (1536-dimensional embeddings)
+Last Re-indexed: 2026-11-19
+Total Tables: 7 (students, social_risk, attendance, exam_scores, schemes, agent_memory, interventions)
+
+========================================================================================================================
+1. TABLE: students (Core Socio-Demographic Cohort Profiles)
+========================================================================================================================
+ID  | Name             | Gender | Caste   | Income(₹) | Grade | Age | HH Size | Kids | Dist(km) | Language | Occupation        | Location   | Case Category / Archetype
+----+------------------+--------+---------+-----------+-------+-----+---------+------+----------+----------+-------------------+------------+------------------------------------------
+1   | Ramesh Soren     | Male   | ST      | 18,000    | 9     | 15  | 6       | 4    | 11.5     | Hindi    | Daily Wage Labor  | Rural      | EXTREME DANGER: Child labor & kiln migration
+2   | Kavita Kumari    | Female | SC      | 24,000    | 10    | 16  | 7       | 5    | 8.0      | Hindi    | Farming           | Rural      | DANGER: Full-time childcare & female drop
+3   | Aarav Sharma     | Male   | General | 95,000    | 10    | 15  | 4       | 1    | 2.0      | Hindi    | Shopkeeper        | Semi-Urban | WATCH: Academic cliff edge (STEM failure)
+4   | Sunita Murmu     | Female | ST      | 42,000    | 8     | 14  | 5       | 3    | 9.5      | Hindi    | Farming           | Rural      | WATCH: River crossing & commute fatigue
+5   | Mohammed Zeeshan | Male   | Minority| 22,000    | 9     | 14  | 6       | 3    | 3.0      | Hindi    | Carpentry         | Rural      | NORMAL / WATCH: Low-income aid candidate
+6   | Ananya Sen       | Female | General | 120,000   | 10    | 15  | 4       | 1    | 1.5      | Bengali  | Teacher           | Semi-Urban | NORMAL: Resilient top-performer baseline
+7   | Vikas Kumar      | Male   | SC      | 14,000    | 7     | 13  | 3       | 2    | 4.0      | Hindi    | None (Orphaned)   | Rural      | DANGER: Sudden bereavement (PM CARES eligible)
+8   | Meera Patel      | Female | OBC     | 55,000    | 11    | 17  | 5       | 2    | 4.5      | Hindi    | Farming           | Rural      | WATCH: Seasonal harvest labor & Girls STEM
+9   | Deepak Baitha    | Male   | SC      | 30,000    | 8     | 14  | 6       | 4    | 5.0      | Hindi    | Daily Wage Labor  | Rural      | DANGER: Multi-sibling dropout precedent
+10  | Pooja Mondal     | Female | General | 36,000    | 9     | 15  | 5       | 2    | 3.5      | Bengali  | Construction      | Semi-Urban | WATCH: Interstate migrant language barrier
+
+========================================================================================================================
+2. TABLE: social_risk (Household Vulnerability & Family Literacy Indicators)
+========================================================================================================================
+Student ID | Student Name     | Seasonal Labor | Sibling Dropout | Migrant Family | Childcare Resp. | Parent Education Level
+-----------+------------------+----------------+-----------------+----------------+-----------------+-----------------------
+1          | Ramesh Soren     | TRUE           | TRUE            | TRUE           | FALSE           | None (Illiterate)
+2          | Kavita Kumari    | FALSE          | TRUE            | FALSE          | TRUE            | None (Illiterate)
+3          | Aarav Sharma     | FALSE          | FALSE           | FALSE          | FALSE           | Secondary
+4          | Sunita Murmu     | TRUE           | FALSE           | FALSE          | FALSE           | Primary
+5          | Mohammed Zeeshan | FALSE          | FALSE           | FALSE          | FALSE           | None (Illiterate)
+6          | Ananya Sen       | FALSE          | FALSE           | FALSE          | FALSE           | Graduate
+7          | Vikas Kumar      | FALSE          | FALSE           | FALSE          | TRUE            | None (Illiterate)
+8          | Meera Patel      | TRUE           | FALSE           | FALSE          | FALSE           | Primary
+9          | Deepak Baitha    | FALSE          | TRUE            | FALSE          | FALSE           | None (Illiterate)
+10         | Pooja Mondal     | FALSE          | FALSE           | TRUE           | FALSE           | Primary
+
+========================================================================================================================
+3. TABLE: attendance (Longitudinal Monthly Records & Trajectory)
+========================================================================================================================
+Student ID | Student Name     | August 2026 (%) | September 2026 (%) | October 2026 (%) | Trajectory Description
+-----------+------------------+-----------------+--------------------+------------------+--------------------------------------
+1          | Ramesh Soren     | 62.0%           | 48.0%              | 38.5%            | Severe collapse (<40% threshold)
+2          | Kavita Kumari    | 74.0%           | 61.0%              | 51.0%            | Steady decline due to domestic duties
+3          | Aarav Sharma     | 85.0%           | 83.0%              | 81.5%            | Stable (>80%), non-attendance issue
+4          | Sunita Murmu     | 88.0%           | 76.0%              | 69.0%            | Monsoon/seasonal commute barrier drop
+5          | Mohammed Zeeshan | 90.0%           | 88.0%              | 87.0%            | High consistency despite poverty
+6          | Ananya Sen       | 98.0%           | 95.0%              | 96.5%            | Benchmark consistency (>95%)
+7          | Vikas Kumar      | 80.0%           | 58.0%              | 52.0%            | Precipitous drop after parental loss
+8          | Meera Patel      | 86.0%           | 84.0%              | 72.0%            | Harvest month dip in October
+9          | Deepak Baitha    | 65.0%           | 62.0%              | 59.0%            | Chronic disengagement (<60%)
+10         | Pooja Mondal     | 82.0%           | 79.0%              | 77.0%            | Moderate attendance (75-80%)
+
+========================================================================================================================
+4. TABLE: exam_scores (Subject Trajectories & Academic Cliff Edges)
+========================================================================================================================
+Student ID | Student Name     | Subject        | Previous Score | Recent Score | Delta (Score Change) | Academic Status
+-----------+------------------+----------------+----------------+--------------+----------------------+-------------------------
+1          | Ramesh Soren     | Mathematics    | 38.0           | 24.0         | -14.0                | Critical Failure (<25)
+1          | Ramesh Soren     | Science        | --             | 28.0         | --                   | Critical Failure (<30)
+2          | Kavita Kumari    | Mathematics    | 68.0           | 29.0         | -39.0                | Severe Academic Collapse
+3          | Aarav Sharma     | Mathematics    | 78.0           | 33.0         | -45.0                | Academic Cliff Edge
+3          | Aarav Sharma     | Science        | 74.0           | 41.0         | -33.0                | Steep Decline in STEM
+4          | Sunita Murmu     | Mathematics    | --             | 45.0         | --                   | Borderline Passing
+5          | Mohammed Zeeshan | Mathematics    | --             | 64.0         | --                   | Solid Passing Grade
+6          | Ananya Sen       | Mathematics    | --             | 91.0         | --                   | High Distinction
+7          | Vikas Kumar      | Mathematics    | 58.0           | 31.0         | -27.0                | Post-Crisis Grade Drop
+8          | Meera Patel      | Science        | --             | 72.0         | --                   | Strong in Biology
+8          | Meera Patel      | Mathematics    | --             | 48.0         | --                   | Borderline in Math
+9          | Deepak Baitha    | Mathematics    | --             | 36.0         | --                   | Low Passing Edge
+10         | Pooja Mondal     | Hindi          | --             | 38.0         | --                   | Language Friction
+
+========================================================================================================================
+5. TABLE: schemes (Government Welfare & Scholarship Eligibility Engine)
+========================================================================================================================
+Scheme ID | Scheme Name                                 | Grades | Max Income(₹) | Caste Category | Gender Criteria
+----------+---------------------------------------------+--------+---------------+----------------+----------------
+1         | Pre-Matric Scholarship for SC Students      | 1 - 10 | 250,000       | SC             | Any
+2         | Pre-Matric Scholarship for ST Students      | 1 - 10 | 250,000       | ST             | Any
+3         | Post-Matric Scholarship for SC Students     | 11 - 12| 250,000       | SC             | Any
+4         | Post-Matric Scholarship for ST Students     | 11 - 12| 250,000       | ST             | Any
+5         | Pre-Matric Scholarship for OBC Students     | 1 - 10 | 100,000       | OBC            | Any
+6         | National Means-cum-Merit Scholarship (NMMS) | 9 - 12 | 350,000       | Any            | Any
+7         | Pre-Matric Scholarship for Minority Students| 1 - 10 | 100,000       | Minority       | Any
+8         | Pragati Scholarship for Girl Students       | 11 - 12| 800,000       | Any            | Female
+9         | Sukanya Samriddhi State Scholarship         | 1 - 12 | 300,000       | Any            | Female
+10        | PM CARES for Children                       | 1 - 12 | 500,000       | Any            | Any
+
+========================================================================================================================
+6. TABLE: agent_memory (Episodic Context with pgvector & Hybrid Retrieval)
+========================================================================================================================
+Student ID | Context Summary / Episodic Narrative                                       | Status Tag | Vector Dim | Time-Decay
+-----------+----------------------------------------------------------------------------+------------+------------+-----------
+1 (Ramesh) | Absent 3 weeks in monsoon sowing. Family in brick kiln. Elder dropouts.    | DANGER     | 1536-dim   | Active
+2 (Kavita) | Mother bedridden; full-time domestic childcare and cooking. Math collapse. | DANGER     | 1536-dim   | Active
+3 (Aarav)  | Severe conceptual struggle in quadratics. Attendance regular. Tutor seek.  | WATCH      | 1536-dim   | Active
+4 (Sunita) | River crossing impassable during monsoons. 9.5 km commute exhaustion.      | WATCH      | 1536-dim   | Active
+5 (Zeeshan)| High academic motivation despite daily wage father. Minority aid eligible. | NORMAL     | 1536-dim   | Active
+7 (Vikas)  | Father passed away suddenly; single mother crisis. Potential withdrawal.   | DANGER     | 1536-dim   | Active
+9 (Deepak) | Older brothers left at age 14 for transport hubs. Father favors early work.| DANGER     | 1536-dim   | Active
+========================================================================================================================

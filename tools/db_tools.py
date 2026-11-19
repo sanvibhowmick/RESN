@@ -13,12 +13,12 @@ def get_student_full_context(student_id):
     if not student_data:
         return {"error": "Student not found"}
 
-    # 2. Fetch Recent Attendance (Last 3 records)
-    att_sql = "SELECT month, attendance_percent FROM attendance WHERE student_id = %s ORDER BY month DESC LIMIT 3"
+    # 2. Fetch Recent Attendance (Last 3 records, newest first)
+    att_sql = "SELECT month, attendance_percent FROM attendance WHERE student_id = %s ORDER BY month DESC, record_id DESC LIMIT 3"
     attendance = run_query(att_sql, (student_id,), return_dict=True)
 
-    # 3. Fetch Academic Performance (Weakest Subjects)
-    score_sql = "SELECT subject, score, exam_date FROM exam_scores WHERE student_id = %s ORDER BY exam_date DESC"
+    # 3. Fetch Academic Performance (Newest exam scores first)
+    score_sql = "SELECT subject, score, exam_date FROM exam_scores WHERE student_id = %s ORDER BY exam_date DESC, score_id DESC"
     scores = run_query(score_sql, (student_id,), return_dict=True)
 
     # 4. Fetch Social Risk Indicators

@@ -7,6 +7,7 @@ from agents.educator import Educator
 from agents.community_mediator import CommunityMediator
 from memory.pg_vector import PGVectorMemory
 from tools.db_tools import get_student_full_context
+from db_connector import run_query
 
 class RESNOrchestrator:
     def __init__(self):
@@ -62,30 +63,128 @@ class RESNOrchestrator:
         # 2. Level 1: Risk Analysis (The Foundation)
         risk_report = self.analyst.analyze(student_data, past_memories)
         
-        # Save the Analyst's current conclusion to long-term memory
+        # Sanitize status string ('NORMAL', 'WATCH', 'DANGER') and score
+        raw_status = risk_report.get('status', 'NORMAL')
+        status = str(raw_status).strip().upper()
+        current_risk_score = int(risk_report.get('risk_score', 0))
+
+        attendance_hist = student_data.get('attendance_history', [])
+        current_att = float(attendance_hist[0].get('attendance_percent', 75.0)) if attendance_hist else 75.0
+        academic_hist = student_data.get('academic_performance', [])
+        current_score_exam = float(academic_hist[0].get('score', 50.0)) if academic_hist else 50.0
+
+        # Query historical analysis runs to track longitudinal trajectory (improvement / deprovement)
+        past_runs = run_query(
+            """
+            SELECT memory_id, context_summary, metadata, created_at
+            FROM agent_memory
+            WHERE student_id = %s AND (metadata->>'type' IS NULL OR metadata->>'type' != 'improvement')
+            ORDER BY created_at DESC
+            """,
+            (student_id,),
+            return_dict=True
+        ) or []
+
+        run_number = len(past_runs) + 1
+
+        if run_number == 1:
+            trajectory = {
+                "run_number": 1,
+                "is_baseline": True,
+                "current_score": current_risk_score,
+                "current_status": status,
+                "current_attendance": current_att,
+                "current_exam_score": current_score_exam,
+                "message": "Baseline diagnostic run. Future runs will track longitudinal progress, improvements, and risk escalations."
+            }
+        else:
+            prev_run = past_runs[0]
+            prev_meta = prev_run.get('metadata', {}) or {}
+            prev_score = int(prev_meta.get('score', current_risk_score))
+            prev_status = str(prev_meta.get('status', status)).strip().upper()
+            prev_att = float(prev_meta.get('attendance', current_att))
+            prev_exam = float(prev_meta.get('exam_score', current_score_exam))
+
+            delta_score = current_risk_score - prev_score
+            delta_att = current_att - prev_att
+            delta_exam = current_score_exam - prev_exam
+
+            if delta_score <= -4 or (delta_score <= 0 and delta_att >= 3.0):
+                trend = "IMPROVEMENT"
+                title = f"🟢 Measurable Improvement Detected (Run #{run_number})"
+            elif delta_score >= 4 or (delta_score >= 0 and delta_att <= -3.0):
+                trend = "DEPROVEMENT"
+                title = f"🔴 Risk Escalation / Deprovement Alert (Run #{run_number})"
+            else:
+                trend = "STEADY"
+                title = f"⚪ Stable Risk Profile (Run #{run_number})"
+
+            # Fetch documented interventions logged
+            recent_measures = run_query(
+                """
+                SELECT improvement_id, previous_attendance, new_attendance, subject, 
+                       previous_score, new_score, grade, outcome_status, measures_taken, notes, created_at
+                FROM student_improvements
+                WHERE student_id = %s
+                ORDER BY created_at DESC
+                LIMIT 3
+                """,
+                (student_id,),
+                return_dict=True
+            ) or []
+
+            trajectory = {
+                "run_number": run_number,
+                "is_baseline": False,
+                "trend": trend,
+                "title": title,
+                "prev_score": prev_score,
+                "current_score": current_risk_score,
+                "delta_score": delta_score,
+                "prev_status": prev_status,
+                "current_status": status,
+                "prev_attendance": prev_att,
+                "current_attendance": current_att,
+                "delta_attendance": delta_att,
+                "prev_exam_score": prev_exam,
+                "current_exam_score": current_score_exam,
+                "delta_exam_score": delta_exam,
+                "recent_measures": recent_measures,
+                "prev_run_time": str(prev_run.get('created_at'))
+            }
+
+        # Save the Analyst's current conclusion to long-term memory with cohort metadata
+        profile = student_data.get('profile', {})
         self.memory.add_memory(
             student_id=student_id, 
             context_summary=risk_report.get('summary_for_memory', 'No summary provided.'),
-            metadata={"status": risk_report.get('status'), "score": risk_report.get('risk_score')}
+            metadata={
+                "status": status,
+                "score": current_risk_score,
+                "attendance": current_att,
+                "exam_score": current_score_exam,
+                "type": "analysis",
+                "run_number": run_number,
+                "grade": profile.get('grade'),
+                "gender": profile.get('gender'),
+                "location": profile.get('location_name', 'Rural')
+            }
         )
 
         # Cross-student lookup: find OTHER students whose past summaries are
-        # semantically similar to THIS student's current situation, using
-        # this run's own summary as the query so it reflects the live case
-        # rather than a fixed generic phrase.
+        # semantically similar to THIS student's current situation and aligned with their
+        # risk cohort (preventing DANGER cases from matching NORMAL/WATCH students).
         similar_cases = self.memory.find_similar_cases(
             query_text=risk_report.get('summary_for_memory', ''),
             exclude_student_id=student_id,
+            status=status,
             limit=3
         )
-
-        # ✅ CRITICAL FIX: Sanitize the string so "Watch", "WATCH ", and "watch" are all treated equally
-        raw_status = risk_report.get('status', 'NORMAL')
-        status = str(raw_status).strip().upper() 
 
         results = {
             "analysis": risk_report,
             "similar_cases": similar_cases,
+            "trajectory": trajectory,
             "actions": []
         }
 

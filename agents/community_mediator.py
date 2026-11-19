@@ -1,6 +1,7 @@
 import os
 from openai import OpenAI
 import json
+from agents.schemas import CounselingScriptSchema
 from tools.db_tools import record_intervention
 
 class CommunityMediator:
@@ -35,11 +36,27 @@ class CommunityMediator:
         1. DIRECT SPEECH ONLY. No "Tell them that..."
         2. One sentence per bullet point.
         3. Use emotional hooks regarding the child's future support for parents.
+        Output MUST be in valid JSON.
         """
 
-        # Using .get() for the name to prevent KeyError
         student_name = profile.get('name', 'your child')
-        user_prompt = f"Student: {student_name}. Generate 5 talking points in {language}."
+        user_prompt = f"""
+        Student: {student_name}.
+        Generate the structured counseling cheat sheet for a home visit in {language}.
+        Output JSON:
+        {{
+            "language": "{language}",
+            "talking_points": [
+                "Direct speech sentence 1 in {language}",
+                "Direct speech sentence 2 in {language}",
+                "Direct speech sentence 3 in {language}",
+                "Direct speech sentence 4 in {language}",
+                "Direct speech sentence 5 in {language}"
+            ],
+            "cultural_metaphor": "Brief explanation of the agricultural/cultural metaphor used",
+            "emotional_hook": "Core emotional message regarding the child's future and family pride"
+        }}
+        """
 
         try:
             response = self.client.chat.completions.create(
@@ -48,23 +65,34 @@ class CommunityMediator:
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.7 # Higher temperature for more natural, persuasive speech
+                response_format={"type": "json_object"},
+                temperature=0.5
             )
             
-            script_content = response.choices[0].message.content
+            # Runtime validation with Pydantic
+            counseling_data = CounselingScriptSchema.model_validate_json(response.choices[0].message.content)
+            
+            # Bulleted formatted text for UI backwards-compatibility
+            bullets = "\n".join([f"• {pt}" for pt in counseling_data.talking_points])
+            formatted_script = (
+                f"{bullets}\n\n"
+                f"🌾 Cultural Metaphor: {counseling_data.cultural_metaphor}\n"
+                f"❤️ Emotional Hook: {counseling_data.emotional_hook}"
+            )
 
             # Log intervention
             record_intervention(
                 student_id=student_id, 
                 agent_type="CommunityMediator", 
                 action_taken=f"Counseling Script ({language})", 
-                content=script_content
+                content=formatted_script
             )
 
             return {
                 "action_status": "SUCCESS",
                 "language": language,
-                "script": script_content
+                "script": formatted_script,
+                "structured_counseling": counseling_data.model_dump()
             }
             
         except Exception as e:

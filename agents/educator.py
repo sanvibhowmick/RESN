@@ -1,6 +1,7 @@
 import os
 from openai import OpenAI
 import json
+from agents.schemas import RemedialActionCardSchema
 from tools.db_tools import record_intervention
 
 class Educator:
@@ -53,10 +54,15 @@ class Educator:
         Current Score: {current_score} (Dropped from {prev_score})
         Risk Context: {drivers}
 
-        Generate a "Quick-Action Card" with exactly these 3 points:
-        1. 🔍 THE DIAGNOSIS QUESTION: One question to find where the concept broke.
-        2. 💡 THE REAL-WORLD ANALOGY: A rural-context metaphor to explain {subject}.
-        3. ⚡ THE 5-MINUTE FIX: A quick peer-activity to rebuild confidence.
+        Generate a pedagogical Quick-Action Card.
+        Output MUST be in valid JSON:
+        {{
+            "subject": "{subject}",
+            "diagnosis_question": "One targeted question to pinpoint exactly where the student's conceptual understanding broke",
+            "real_world_analogy": "A relatable rural Indian metaphor (farming, village market, harvest, carpentry) explaining the concept",
+            "five_minute_fix": "A quick zero-cost peer activity to rebuild confidence and mastery",
+            "teacher_tips": "A practical classroom tip for delivery"
+        }}
         """
 
         try:
@@ -66,13 +72,21 @@ class Educator:
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.5 
+                response_format={"type": "json_object"},
+                temperature=0.4
             )
             
-            plan_content = response.choices[0].message.content
+            # Runtime validation with Pydantic
+            card = RemedialActionCardSchema.model_validate_json(response.choices[0].message.content)
+            
+            plan_content = (
+                f"1. 🔍 THE DIAGNOSIS QUESTION:\n{card.diagnosis_question}\n\n"
+                f"2. 💡 THE REAL-WORLD ANALOGY:\n{card.real_world_analogy}\n\n"
+                f"3. ⚡ THE 5-MINUTE FIX:\n{card.five_minute_fix}\n\n"
+                f"📌 TEACHER TIP:\n{card.teacher_tips}"
+            )
 
             # 3. Log the intervention in the DB
-            # Ensure any content passed here is serialized safely if it's stored as JSON in DB
             record_intervention(
                 student_id=student_id,
                 agent_type="Educator",
@@ -84,6 +98,7 @@ class Educator:
                 "action_status": "SUCCESS",
                 "subject": subject,
                 "remedial_plan": plan_content,
+                "action_card": card.model_dump(),
                 "decline_observed": decline
             }
 
